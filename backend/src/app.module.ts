@@ -5,6 +5,7 @@ import { AppService } from './app.service';
 import { ContributionsModule } from './contributions/contributions.module';
 import { GroupsModule } from './groups/groups.module';
 import { PrismaModule } from './prisma/prisma.module';
+import { ReleaseRequestsModule } from './release-requests/release-requests.module';
 
 export const { ObserveModule, ObserveInstrument } = createObserveModule();
 
@@ -21,6 +22,7 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
     PrismaModule,
     GroupsModule,
     ContributionsModule,
+    ReleaseRequestsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

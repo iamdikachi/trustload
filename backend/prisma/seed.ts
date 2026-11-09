@@ -195,9 +195,13 @@ async function main() {
   }
 
   // 4. Create 2 Staged Release Requests (CNY verified & released; AED with planted mismatch flagged)
+  const release1Supplier: Record<string, unknown> = {
+    supplier: 'Shenzhen Huaqiangbei Golden Tech Co., Ltd.',
+  };
   const release1 = await prisma.releaseRequest.create({
     data: {
       groupId: group.id,
+      ...release1Supplier,
       amount: '2625.00',
       currency: 'CNY',
       originalAmount: '18900.00',
@@ -274,9 +278,13 @@ async function main() {
   });
 
   // Release Request 2: Dubai AED invoice with planted quantity mismatch flagged by AI
+  const release2Supplier: Record<string, unknown> = {
+    supplier: 'Al Ras Royal Textiles Trading LLC (Deira, Dubai)',
+  };
   await prisma.releaseRequest.create({
     data: {
       groupId: group.id,
+      ...release2Supplier,
       amount: '1280.00',
       currency: 'AED',
       originalAmount: '4700.00',

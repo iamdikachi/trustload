@@ -1,3 +1,5 @@
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import request from 'supertest';
@@ -13,6 +15,7 @@ describe('TrustLoad API (e2e)', () => {
   let paypalService: PaypalService;
   let createdGroupId: string | undefined;
   let firstMemberId: string | undefined;
+  let uploadedInvoicePath: string | undefined;
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -26,6 +29,10 @@ describe('TrustLoad API (e2e)', () => {
   });
 
   afterAll(async () => {
+    if (uploadedInvoicePath) {
+      const fullPath = path.resolve(process.cwd(), uploadedInvoicePath);
+      await fs.promises.unlink(fullPath).catch(() => undefined);
+    }
     if (createdGroupId) {
       await prisma.group
         .delete({ where: { id: createdGroupId } })
@@ -280,5 +287,73 @@ describe('TrustLoad API (e2e)', () => {
       entryCount: 1,
     });
     expect(ledgerRes2.body.ledgerEntries).toHaveLength(1);
+  });
+
+  it('POST /groups/:groupId/release-requests — traveler submits a release request with amount, supplier, currency, and invoice upload; stored with file and shows as pending for the group (FR3)', async () => {
+    expect(createdGroupId).toBeDefined();
+
+    const samplePdfBuffer = Buffer.from(
+      '%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\n%%EOF\n',
+      'utf-8',
+    );
+
+    const createReleaseRes = await request(app.getHttpServer())
+      .post(`/groups/${createdGroupId}/release-requests`)
+      .field('amount', '7200')
+      .field('supplier', 'Shenzhen Golden Dragon Electronics Co.')
+      .field('currency', 'CNY')
+      .field('sourceLanguage', 'zh-CN')
+      .attach('invoice', samplePdfBuffer, {
+        filename: 'shenzhen-supplier-invoice.pdf',
+        contentType: 'application/pdf',
+      })
+      .expect(201);
+
+    const releaseId: string = createReleaseRes.body.id;
+    expect(releaseId).toBeDefined();
+    uploadedInvoicePath = createReleaseRes.body.invoiceFile;
+
+    expect(createReleaseRes.body).toMatchObject({
+      groupId: createdGroupId,
+      supplier: 'Shenzhen Golden Dragon Electronics Co.',
+      currency: 'CNY',
+      originalAmount: '7200',
+      amount: '1000', // 7200 CNY * 0.138889 USD/CNY = 1000.00 USD
+      status: 'PENDING',
+      isPending: true,
+    });
+    expect(createReleaseRes.body.invoiceFile).toContain(
+      'shenzhen-supplier-invoice.pdf',
+    );
+
+    // Verify the file exists on disk and is downloadable via GET /release-requests/:id/invoice
+    const downloadRes = await request(app.getHttpServer())
+      .get(`/release-requests/${releaseId}/invoice`)
+      .expect(200);
+    expect(downloadRes.headers['content-type']).toContain('application/pdf');
+
+    // Verify the release request shows as pending for the group via GET /groups/:groupId/release-requests
+    const groupReleasesRes = await request(app.getHttpServer())
+      .get(`/groups/${createdGroupId}/release-requests`)
+      .expect(200);
+
+    expect(groupReleasesRes.body.pendingCount).toBe(1);
+    expect(groupReleasesRes.body.pendingReleaseRequests).toHaveLength(1);
+    expect(groupReleasesRes.body.pendingReleaseRequests[0]).toMatchObject({
+      id: releaseId,
+      supplier: 'Shenzhen Golden Dragon Electronics Co.',
+      status: 'PENDING',
+      isPending: true,
+      invoiceFile: uploadedInvoicePath,
+    });
+
+    // Also verify it shows as pending on GET /groups/:id
+    const groupRes = await request(app.getHttpServer())
+      .get(`/groups/${createdGroupId}`)
+      .expect(200);
+
+    expect(groupRes.body.summary.pendingReleaseRequestCount).toBe(1);
+    expect(groupRes.body.pendingReleaseRequests).toHaveLength(1);
+    expect(groupRes.body.pendingReleaseRequests[0].id).toBe(releaseId);
   });
 });

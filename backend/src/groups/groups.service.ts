@@ -532,11 +532,23 @@ export class GroupsService {
       .filter((r) => r.status === ReleaseRequestStatus.RELEASED)
       .reduce((sum, r) => sum + Number(r.amount), 0);
 
+    const pendingStatuses = new Set<ReleaseRequestStatus>([
+      'PENDING' as ReleaseRequestStatus,
+      ReleaseRequestStatus.PENDING_VERIFICATION,
+      ReleaseRequestStatus.AWAITING_APPROVAL,
+    ]);
+
+    const pendingReleaseRequests = group.releaseRequests.filter((r) =>
+      pendingStatuses.has(r.status),
+    );
+
     return {
       ...group,
+      pendingReleaseRequests,
       summary: {
         memberCount: group.members.length,
         orderLineCount: group.orderLines.length,
+        pendingReleaseRequestCount: pendingReleaseRequests.length,
         totalExpectedContribution: Number(totalExpectedContribution.toFixed(2)),
         totalContributionsCompleted: Number(
           totalContributionsCompleted.toFixed(2),

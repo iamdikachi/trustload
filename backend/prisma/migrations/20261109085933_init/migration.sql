@@ -11,7 +11,7 @@ CREATE TYPE "SharedCostRule" AS ENUM ('PROPORTIONAL_TO_VALUE', 'EQUAL', 'BY_CONT
 CREATE TYPE "ContributionStatus" AS ENUM ('PENDING', 'COMPLETED', 'FAILED', 'REFUNDED');
 
 -- CreateEnum
-CREATE TYPE "ReleaseRequestStatus" AS ENUM ('PENDING_VERIFICATION', 'AWAITING_APPROVAL', 'APPROVED', 'REJECTED', 'RELEASED');
+CREATE TYPE "ReleaseRequestStatus" AS ENUM ('PENDING', 'PENDING_VERIFICATION', 'AWAITING_APPROVAL', 'APPROVED', 'REJECTED', 'RELEASED');
 
 -- CreateEnum
 CREATE TYPE "ApprovalDecision" AS ENUM ('APPROVED', 'REJECTED');
@@ -87,6 +87,7 @@ CREATE TABLE "contributions" (
 CREATE TABLE "release_requests" (
     "id" TEXT NOT NULL,
     "group_id" TEXT NOT NULL,
+    "supplier" TEXT,
     "amount" DECIMAL(14,2) NOT NULL,
     "currency" TEXT NOT NULL DEFAULT 'USD',
     "original_amount" DECIMAL(14,2) NOT NULL,
@@ -95,7 +96,7 @@ CREATE TABLE "release_requests" (
     "source_language" TEXT,
     "invoice_file" TEXT NOT NULL,
     "ai_report" JSONB,
-    "status" "ReleaseRequestStatus" NOT NULL DEFAULT 'PENDING_VERIFICATION',
+    "status" "ReleaseRequestStatus" NOT NULL DEFAULT 'PENDING',
     "paypal_payout_id" TEXT,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMP(3) NOT NULL,
