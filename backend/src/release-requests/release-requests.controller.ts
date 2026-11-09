@@ -19,12 +19,13 @@ import {
 } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { CreateReleaseRequestDto } from './dto/create-release-request.dto';
+import { SubmitApprovalDto } from './dto/submit-approval.dto';
 import {
   ReleaseRequestsService,
   type UploadedInvoiceFile,
 } from './release-requests.service';
 
-@ApiTags('Release Requests (FR3)')
+@ApiTags('Release Requests & Approvals (FR3 / FR5)')
 @Controller()
 export class ReleaseRequestsController {
   constructor(
@@ -116,5 +117,55 @@ export class ReleaseRequestsController {
     const stream = fs.createReadStream(absolutePath);
     stream.pipe(res);
   }
-}
 
+  @Post('release-requests/:id/approvals')
+  @ApiOperation({
+    summary:
+      'Member approves or rejects a release request; triggers PayPal payout when approvalThreshold is met (FR5)',
+  })
+  @ApiParam({ name: 'id', description: 'Release Request UUID' })
+  @ApiResponse({
+    status: 201,
+    description:
+      'Approval recorded; if approval threshold is reached, triggers a staged PayPal payout and writes a ledger entry.',
+  })
+  async submitApproval(
+    @Param('id') id: string,
+    @Body() dto: SubmitApprovalDto,
+  ) {
+    return this.releaseRequestsService.submitApproval(id, dto);
+  }
+
+  @Post('groups/:groupId/release-requests/:id/approvals')
+  @ApiOperation({
+    summary:
+      'Member approves or rejects a release request within a group; triggers PayPal payout when approvalThreshold is met (FR5)',
+  })
+  @ApiParam({ name: 'groupId', description: 'Group UUID' })
+  @ApiParam({ name: 'id', description: 'Release Request UUID' })
+  async submitGroupReleaseApproval(
+    @Param('id') id: string,
+    @Body() dto: SubmitApprovalDto,
+  ) {
+    return this.releaseRequestsService.submitApproval(id, dto);
+  }
+
+  @Get('release-requests/:id/approvals')
+  @ApiOperation({
+    summary: 'List all member approvals/rejections and threshold progress for a release request',
+  })
+  @ApiParam({ name: 'id', description: 'Release Request UUID' })
+  async listApprovals(@Param('id') id: string) {
+    return this.releaseRequestsService.listApprovals(id);
+  }
+
+  @Post('release-requests/:id/payout')
+  @ApiOperation({
+    summary:
+      'Trigger staged PayPal payout for an approved release request (fails if approval threshold is not met) (FR5)',
+  })
+  @ApiParam({ name: 'id', description: 'Release Request UUID' })
+  async triggerPayout(@Param('id') id: string) {
+    return this.releaseRequestsService.triggerPayout(id);
+  }
+}

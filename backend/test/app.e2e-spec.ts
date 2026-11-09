@@ -15,6 +15,8 @@ describe('TrustLoad API (e2e)', () => {
   let paypalService: PaypalService;
   let createdGroupId: string | undefined;
   let firstMemberId: string | undefined;
+  let memberIds: string[] = [];
+  let createdReleaseRequestId: string | undefined;
   let uploadedInvoicePath: string | undefined;
 
   beforeAll(async () => {
@@ -116,6 +118,7 @@ describe('TrustLoad API (e2e)', () => {
     expect(createRes.body.id).toBeDefined();
     createdGroupId = createRes.body.id;
     firstMemberId = createRes.body.members[0].id;
+    memberIds = createRes.body.members.map((m: { id: string }) => m.id);
 
     expect(createRes.body.name).toBe(payload.name);
     expect(createRes.body.baseCurrency).toBe('USD');
@@ -311,6 +314,7 @@ describe('TrustLoad API (e2e)', () => {
 
     const releaseId: string = createReleaseRes.body.id;
     expect(releaseId).toBeDefined();
+    createdReleaseRequestId = releaseId;
     uploadedInvoicePath = createReleaseRes.body.invoiceFile;
 
     expect(createReleaseRes.body).toMatchObject({
@@ -355,5 +359,116 @@ describe('TrustLoad API (e2e)', () => {
     expect(groupRes.body.summary.pendingReleaseRequestCount).toBe(1);
     expect(groupRes.body.pendingReleaseRequests).toHaveLength(1);
     expect(groupRes.body.pendingReleaseRequests[0].id).toBe(releaseId);
+  });
+
+  it('POST /release-requests/:id/approvals & /payout — enforces no payout without approval record, triggers PayPal sandbox payout when threshold is met, and writes a ledger entry with the PayPal reference (FR5)', async () => {
+    expect(createdReleaseRequestId).toBeDefined();
+    expect(memberIds.length).toBeGreaterThanOrEqual(3);
+
+    // 1. Attempting payout with 0 approval records must fail with 400 Bad Request
+    await request(app.getHttpServer())
+      .post(`/release-requests/${createdReleaseRequestId}/payout`)
+      .expect(400);
+
+    // 2. Vendor 1 approves (1 of 3 required) — threshold not yet met
+    const approval1Res = await request(app.getHttpServer())
+      .post(`/release-requests/${createdReleaseRequestId}/approvals`)
+      .send({
+        memberId: memberIds[0],
+        decision: 'APPROVED',
+        comment: 'Looks good from Vendor 1',
+      })
+      .expect(201);
+
+    expect(approval1Res.body).toMatchObject({
+      approvedCount: 1,
+      rejectedCount: 0,
+      approvalThreshold: 3,
+      thresholdMet: false,
+      payoutTriggered: false,
+    });
+    expect(approval1Res.body.releaseRequest.status).toBe('AWAITING_APPROVAL');
+
+    // 3. Vendor 2 approves (2 of 3 required) — threshold still not met
+    const approval2Res = await request(app.getHttpServer())
+      .post(`/release-requests/${createdReleaseRequestId}/approvals`)
+      .send({
+        memberId: memberIds[1],
+        decision: 'APPROVED',
+        comment: 'Confirmed by Vendor 2',
+      })
+      .expect(201);
+
+    expect(approval2Res.body).toMatchObject({
+      approvedCount: 2,
+      rejectedCount: 0,
+      approvalThreshold: 3,
+      thresholdMet: false,
+      payoutTriggered: false,
+    });
+
+    // Attempting manual payout before threshold is met must still fail
+    await request(app.getHttpServer())
+      .post(`/release-requests/${createdReleaseRequestId}/payout`)
+      .expect(400);
+
+    // 4. Vendor 3 approves (3 of 3 required) — threshold is reached, triggering PayPal Sandbox Payout
+    const approval3Res = await request(app.getHttpServer())
+      .post(`/release-requests/${createdReleaseRequestId}/approvals`)
+      .send({
+        memberId: memberIds[2],
+        decision: 'APPROVED',
+        comment: 'Threshold met by Vendor 3',
+      })
+      .expect(201);
+
+    expect(approval3Res.body).toMatchObject({
+      approvedCount: 3,
+      rejectedCount: 0,
+      approvalThreshold: 3,
+      thresholdMet: true,
+      payoutTriggered: true,
+    });
+
+    const payoutBatchId: string = approval3Res.body.paypalPayoutId;
+    expect(payoutBatchId).toBeDefined();
+    expect(approval3Res.body.releaseRequest).toMatchObject({
+      id: createdReleaseRequestId,
+      status: 'RELEASED',
+      paypalPayoutId: payoutBatchId,
+      isPending: false,
+    });
+    expect(approval3Res.body.ledgerEntry).toMatchObject({
+      groupId: createdGroupId,
+      type: 'STAGED_RELEASE',
+      amount: '-1000',
+      originalAmount: '7200',
+      currency: 'CNY',
+      paypalRef: payoutBatchId,
+    });
+
+    // 5. Verify the STAGED_RELEASE entry appears in the group ledger with its PayPal payout reference
+    const ledgerRes = await request(app.getHttpServer())
+      .get(`/groups/${createdGroupId}/ledger`)
+      .expect(200);
+
+    expect(ledgerRes.body.summary).toMatchObject({
+      totalIn: 1000,
+      totalReleased: 1000,
+      potBalance: 0,
+      entryCount: 2,
+    });
+
+    const releaseLedgerEntry = ledgerRes.body.ledgerEntries.find(
+      (e: { type: string }) => e.type === 'STAGED_RELEASE',
+    );
+    expect(releaseLedgerEntry).toBeDefined();
+    expect(releaseLedgerEntry).toMatchObject({
+      type: 'STAGED_RELEASE',
+      paypalRef: payoutBatchId,
+      amount: '-1000',
+      originalAmount: '7200',
+      currency: 'CNY',
+    });
   });
 });

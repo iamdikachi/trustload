@@ -5,9 +5,15 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { ReleaseRequestStatus } from '@prisma/client';
+import {
+  ApprovalDecision,
+  LedgerEntryType,
+  ReleaseRequestStatus,
+} from '@prisma/client';
+import { PaypalService } from '../contributions/paypal.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateReleaseRequestDto } from './dto/create-release-request.dto';
+import { SubmitApprovalDto } from './dto/submit-approval.dto';
 import { FxRatesService } from './fx-rates.service';
 
 export interface UploadedInvoiceFile {
@@ -55,6 +61,7 @@ export class ReleaseRequestsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly fxRatesService: FxRatesService,
+    private readonly paypalService: PaypalService,
   ) {}
 
   async createReleaseRequest(
@@ -154,6 +161,402 @@ export class ReleaseRequestsService {
     return {
       ...releaseRequest,
       isPending: PENDING_RELEASE_STATUSES.has(releaseRequest.status),
+    };
+  }
+
+  async submitApproval(releaseRequestId: string, dto: SubmitApprovalDto) {
+    const memberId = dto?.memberId?.trim();
+    if (!memberId) {
+      throw new BadRequestException('memberId is required.');
+    }
+
+    const decision = dto?.decision;
+    if (
+      decision !== ApprovalDecision.APPROVED &&
+      decision !== ApprovalDecision.REJECTED
+    ) {
+      throw new BadRequestException(
+        'decision must be either APPROVED or REJECTED.',
+      );
+    }
+
+    const releaseRequest = await this.prisma.releaseRequest.findUnique({
+      where: { id: releaseRequestId },
+      include: {
+        group: {
+          include: {
+            traveler: true,
+            members: true,
+          },
+        },
+        approvals: true,
+      },
+    });
+
+    if (!releaseRequest) {
+      throw new NotFoundException(
+        `Release request "${releaseRequestId}" not found.`,
+      );
+    }
+
+    if (releaseRequest.status === ReleaseRequestStatus.RELEASED) {
+      throw new BadRequestException(
+        'Release request has already been paid out and cannot be modified.',
+      );
+    }
+
+    if (releaseRequest.status === ReleaseRequestStatus.REJECTED) {
+      throw new BadRequestException(
+        'Release request has already been rejected.',
+      );
+    }
+
+    const isGroupMember = releaseRequest.group.members.some(
+      (m) => m.id === memberId,
+    );
+    if (!isGroupMember) {
+      throw new BadRequestException(
+        `Member "${memberId}" does not belong to group "${releaseRequest.groupId}".`,
+      );
+    }
+
+    const approval = await this.prisma.approval.upsert({
+      where: {
+        releaseRequestId_memberId: {
+          releaseRequestId,
+          memberId,
+        },
+      },
+      update: {
+        decision,
+        comment: dto?.comment?.trim() || null,
+      },
+      create: {
+        releaseRequestId,
+        memberId,
+        decision,
+        comment: dto?.comment?.trim() || null,
+      },
+      include: {
+        member: {
+          include: {
+            user: true,
+          },
+        },
+      },
+    });
+
+    const allApprovals = await this.prisma.approval.findMany({
+      where: { releaseRequestId },
+    });
+
+    const approvedCount = allApprovals.filter(
+      (a) => a.decision === ApprovalDecision.APPROVED,
+    ).length;
+    const rejectedCount = allApprovals.filter(
+      (a) => a.decision === ApprovalDecision.REJECTED,
+    ).length;
+
+    const threshold = Math.max(1, releaseRequest.group.approvalThreshold);
+    const totalMembers = releaseRequest.group.members.length;
+
+    if (approvedCount >= threshold) {
+      const payoutOutcome =
+        await this.executePayoutForApprovedRelease(releaseRequestId);
+      return {
+        approval,
+        approvedCount,
+        rejectedCount,
+        approvalThreshold: threshold,
+        thresholdMet: true,
+        payoutTriggered: true,
+        ...payoutOutcome,
+      };
+    }
+
+    const cannotReachThreshold =
+      totalMembers > 0
+        ? rejectedCount > totalMembers - threshold
+        : rejectedCount > 0;
+
+    if (cannotReachThreshold) {
+      const rejectedRelease = await this.prisma.releaseRequest.update({
+        where: { id: releaseRequestId },
+        data: { status: ReleaseRequestStatus.REJECTED },
+        include: {
+          approvals: {
+            include: {
+              member: {
+                include: {
+                  user: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      return {
+        approval,
+        approvedCount,
+        rejectedCount,
+        approvalThreshold: threshold,
+        thresholdMet: false,
+        payoutTriggered: false,
+        releaseRequest: {
+          ...rejectedRelease,
+          isPending: false,
+        },
+        ledgerEntry: null,
+      };
+    }
+
+    const awaitingRelease = await this.prisma.releaseRequest.update({
+      where: { id: releaseRequestId },
+      data: { status: ReleaseRequestStatus.AWAITING_APPROVAL },
+      include: {
+        approvals: {
+          include: {
+            member: {
+              include: {
+                user: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    return {
+      approval,
+      approvedCount,
+      rejectedCount,
+      approvalThreshold: threshold,
+      thresholdMet: false,
+      payoutTriggered: false,
+      releaseRequest: {
+        ...awaitingRelease,
+        isPending: true,
+      },
+      ledgerEntry: null,
+    };
+  }
+
+  async triggerPayout(releaseRequestId: string) {
+    return this.executePayoutForApprovedRelease(releaseRequestId);
+  }
+
+  async executePayoutForApprovedRelease(releaseRequestId: string) {
+    const releaseRequest = await this.prisma.releaseRequest.findUnique({
+      where: { id: releaseRequestId },
+      include: {
+        group: {
+          include: {
+            traveler: true,
+          },
+        },
+        approvals: {
+          include: {
+            member: {
+              include: {
+                user: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!releaseRequest) {
+      throw new NotFoundException(
+        `Release request "${releaseRequestId}" not found.`,
+      );
+    }
+
+    // Idempotent return if already released
+    if (
+      releaseRequest.status === ReleaseRequestStatus.RELEASED &&
+      releaseRequest.paypalPayoutId
+    ) {
+      const existingLedgerEntry = await this.prisma.ledgerEntry.findFirst({
+        where: {
+          groupId: releaseRequest.groupId,
+          type: LedgerEntryType.STAGED_RELEASE,
+          paypalRef: releaseRequest.paypalPayoutId,
+        },
+      });
+
+      return {
+        releaseRequest: {
+          ...releaseRequest,
+          isPending: false,
+        },
+        ledgerEntry: existingLedgerEntry,
+        paypalPayoutId: releaseRequest.paypalPayoutId,
+      };
+    }
+
+    // Safety Rule (PRD Section 6 & 10): No payout without an explicit approval record meeting threshold
+    const approvedRecords = releaseRequest.approvals.filter(
+      (a) => a.decision === ApprovalDecision.APPROVED,
+    );
+    const threshold = Math.max(1, releaseRequest.group.approvalThreshold);
+
+    if (approvedRecords.length === 0 || approvedRecords.length < threshold) {
+      throw new BadRequestException(
+        `Cannot trigger payout without required member approvals: requires ${threshold} APPROVED record(s), currently has ${approvedRecords.length}.`,
+      );
+    }
+
+    const supplierLabel =
+      ((releaseRequest as Record<string, unknown>).supplier as
+        | string
+        | undefined) ?? 'Supplier Invoice';
+
+    const payoutResult = await this.paypalService.createPayout({
+      releaseRequestId: releaseRequest.id,
+      recipientEmail: releaseRequest.group.traveler.email,
+      amount: Number(releaseRequest.amount).toFixed(2),
+      currency: releaseRequest.group.baseCurrency,
+      note: `TrustLoad staged release for ${supplierLabel} (${releaseRequest.group.name})`,
+    });
+
+    return this.prisma.$transaction(
+      async (tx) => {
+        const current = await tx.releaseRequest.findUniqueOrThrow({
+          where: { id: releaseRequestId },
+        });
+
+        if (
+          current.status === ReleaseRequestStatus.RELEASED &&
+          current.paypalPayoutId
+        ) {
+          const existingEntry = await tx.ledgerEntry.findFirst({
+            where: {
+              groupId: current.groupId,
+              type: LedgerEntryType.STAGED_RELEASE,
+              paypalRef: current.paypalPayoutId,
+            },
+          });
+
+          const fullRelease = await tx.releaseRequest.findUniqueOrThrow({
+            where: { id: releaseRequestId },
+            include: {
+              approvals: {
+                include: {
+                  member: { include: { user: true } },
+                },
+              },
+            },
+          });
+
+          return {
+            releaseRequest: {
+              ...fullRelease,
+              isPending: false,
+            },
+            ledgerEntry: existingEntry,
+            paypalPayoutId: current.paypalPayoutId,
+          };
+        }
+
+        const updatedRelease = await tx.releaseRequest.update({
+          where: { id: releaseRequestId },
+          data: {
+            status: ReleaseRequestStatus.RELEASED,
+            paypalPayoutId: payoutResult.payoutBatchId,
+          },
+          include: {
+            approvals: {
+              include: {
+                member: {
+                  include: {
+                    user: true,
+                  },
+                },
+              },
+            },
+          },
+        });
+
+        const signedBaseAmount = (-Math.abs(
+          Number(releaseRequest.amount),
+        )).toFixed(2);
+
+        const ledgerEntry = await tx.ledgerEntry.create({
+          data: {
+            groupId: releaseRequest.groupId,
+            type: LedgerEntryType.STAGED_RELEASE,
+            amount: signedBaseAmount,
+            originalAmount: releaseRequest.originalAmount,
+            currency: releaseRequest.currency,
+            fxRate: releaseRequest.fxRate,
+            fxRateDate: releaseRequest.fxRateDate,
+            paypalRef: payoutResult.payoutBatchId,
+            description: `Staged payout to ${releaseRequest.group.traveler.name} for ${supplierLabel} (PayPal Payout ${payoutResult.payoutBatchId})`,
+          },
+        });
+
+        return {
+          releaseRequest: {
+            ...updatedRelease,
+            isPending: false,
+          },
+          ledgerEntry,
+          paypalPayoutId: payoutResult.payoutBatchId,
+        };
+      },
+      { maxWait: 15000, timeout: 30000 },
+    );
+  }
+
+  async listApprovals(releaseRequestId: string) {
+    const releaseRequest = await this.prisma.releaseRequest.findUnique({
+      where: { id: releaseRequestId },
+      include: {
+        group: {
+          select: {
+            id: true,
+            name: true,
+            approvalThreshold: true,
+          },
+        },
+        approvals: {
+          include: {
+            member: {
+              include: {
+                user: true,
+              },
+            },
+          },
+          orderBy: { createdAt: 'asc' },
+        },
+      },
+    });
+
+    if (!releaseRequest) {
+      throw new NotFoundException(
+        `Release request "${releaseRequestId}" not found.`,
+      );
+    }
+
+    const approvedCount = releaseRequest.approvals.filter(
+      (a) => a.decision === ApprovalDecision.APPROVED,
+    ).length;
+    const rejectedCount = releaseRequest.approvals.filter(
+      (a) => a.decision === ApprovalDecision.REJECTED,
+    ).length;
+    const threshold = Math.max(1, releaseRequest.group.approvalThreshold);
+
+    return {
+      releaseRequestId: releaseRequest.id,
+      status: releaseRequest.status,
+      paypalPayoutId: releaseRequest.paypalPayoutId,
+      approvedCount,
+      rejectedCount,
+      approvalThreshold: threshold,
+      thresholdMet: approvedCount >= threshold,
+      approvals: releaseRequest.approvals,
     };
   }
 
@@ -327,4 +730,3 @@ export class ReleaseRequestsService {
       .join('/');
   }
 }
-
