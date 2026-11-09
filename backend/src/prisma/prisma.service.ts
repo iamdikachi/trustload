@@ -14,7 +14,13 @@ export class PrismaService
       throw new Error('DATABASE_URL environment variable is not set');
     }
     const adapter = new PrismaPg({ connectionString });
-    super({ adapter });
+    super({
+      adapter,
+      transactionOptions: {
+        maxWait: 15000,
+        timeout: 30000,
+      },
+    });
   }
 
   async onModuleInit(): Promise<void> {
@@ -25,4 +31,3 @@ export class PrismaService
     await this.$disconnect();
   }
 }
-

@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { createObserveModule } from '@nestjs/observe';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { GroupsModule } from './groups/groups.module';
 import { PrismaModule } from './prisma/prisma.module';
 
 export const { ObserveModule, ObserveInstrument } = createObserveModule();
@@ -17,6 +18,7 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
       serviceId: 'backend',
     }),
     PrismaModule,
+    GroupsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
