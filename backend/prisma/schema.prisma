@@ -1,0 +1,244 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  TRAVELER
+  VENDOR
+}
+
+enum GroupStatus {
+  SETUP
+  FUNDING
+  ACTIVE
+  SETTLING
+  CLOSED
+}
+
+enum SharedCostRule {
+  PROPORTIONAL_TO_VALUE
+  EQUAL
+  BY_CONTRIBUTION
+}
+
+enum ContributionStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+enum ReleaseRequestStatus {
+  PENDING_VERIFICATION
+  AWAITING_APPROVAL
+  APPROVED
+  REJECTED
+  RELEASED
+}
+
+enum ApprovalDecision {
+  APPROVED
+  REJECTED
+}
+
+enum LedgerEntryType {
+  CONTRIBUTION
+  STAGED_RELEASE
+  RECEIPT_SPEND
+  REFUND
+  REVERSAL
+}
+
+model User {
+  id        String   @id @default(uuid())
+  name      String
+  email     String   @unique
+  role      UserRole @default(VENDOR)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  traveledGroups Group[]  @relation("GroupTraveler")
+  memberships    Member[]
+
+  @@map("users")
+}
+
+model Group {
+  id                String         @id @default(uuid())
+  name              String
+  travelerId        String         @map("traveler_id")
+  status            GroupStatus    @default(SETUP)
+  approvalThreshold Int            @default(1) @map("approval_threshold")
+  sharedCostRule    SharedCostRule @default(PROPORTIONAL_TO_VALUE) @map("shared_cost_rule")
+  baseCurrency      String         @default("USD") @map("base_currency")
+  createdAt         DateTime       @default(now()) @map("created_at")
+  updatedAt         DateTime       @updatedAt @map("updated_at")
+
+  traveler        User             @relation("GroupTraveler", fields: [travelerId], references: [id], onDelete: Restrict)
+  members         Member[]
+  orderLines      OrderLine[]
+  releaseRequests ReleaseRequest[]
+  receipts        Receipt[]
+  allocations     Allocation[]
+  ledgerEntries   LedgerEntry[]
+
+  @@index([travelerId])
+  @@map("groups")
+}
+
+model Member {
+  id                   String   @id @default(uuid())
+  groupId              String   @map("group_id")
+  userId               String   @map("user_id")
+  contributionExpected Decimal  @db.Decimal(14, 2) @map("contribution_expected")
+  createdAt            DateTime @default(now()) @map("created_at")
+
+  group         Group          @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user          User           @relation(fields: [userId], references: [id], onDelete: Restrict)
+  orderLines    OrderLine[]
+  contributions Contribution[]
+  approvals     Approval[]
+  allocations   Allocation[]
+  ledgerEntries LedgerEntry[]
+
+  @@unique([groupId, userId])
+  @@index([groupId])
+  @@index([userId])
+  @@map("members")
+}
+
+model OrderLine {
+  id        String   @id @default(uuid())
+  groupId   String   @map("group_id")
+  memberId  String   @map("member_id")
+  item      String
+  quantity  Int
+  budget    Decimal  @db.Decimal(14, 2)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  group  Group  @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@index([groupId])
+  @@index([memberId])
+  @@map("order_lines")
+}
+
+model Contribution {
+  id              String             @id @default(uuid())
+  memberId        String             @map("member_id")
+  amount          Decimal            @db.Decimal(14, 2)
+  currency        String             @default("USD")
+  paypalOrderId   String             @unique @map("paypal_order_id")
+  paypalCaptureId String?            @unique @map("paypal_capture_id")
+  status          ContributionStatus @default(PENDING)
+  createdAt       DateTime           @default(now()) @map("created_at")
+
+  member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@index([memberId])
+  @@map("contributions")
+}
+
+model ReleaseRequest {
+  id             String               @id @default(uuid())
+  groupId        String               @map("group_id")
+  amount         Decimal              @db.Decimal(14, 2)
+  currency       String               @default("USD")
+  originalAmount Decimal              @db.Decimal(14, 2) @map("original_amount")
+  fxRate         Decimal              @default(1.0) @db.Decimal(18, 6) @map("fx_rate")
+  fxRateDate     DateTime             @default(now()) @map("fx_rate_date")
+  sourceLanguage String?              @map("source_language")
+  invoiceFile    String               @map("invoice_file")
+  aiReport       Json?                @map("ai_report")
+  status         ReleaseRequestStatus @default(PENDING_VERIFICATION)
+  paypalPayoutId String?              @unique @map("paypal_payout_id")
+  createdAt      DateTime             @default(now()) @map("created_at")
+  updatedAt      DateTime             @updatedAt @map("updated_at")
+
+  group     Group      @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  approvals Approval[]
+
+  @@index([groupId])
+  @@map("release_requests")
+}
+
+model Approval {
+  id               String           @id @default(uuid())
+  releaseRequestId String           @map("release_request_id")
+  memberId         String           @map("member_id")
+  decision         ApprovalDecision
+  comment          String?
+  createdAt        DateTime         @default(now()) @map("created_at")
+
+  releaseRequest ReleaseRequest @relation(fields: [releaseRequestId], references: [id], onDelete: Cascade)
+  member         Member         @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@unique([releaseRequestId, memberId])
+  @@index([releaseRequestId])
+  @@index([memberId])
+  @@map("approvals")
+}
+
+model Receipt {
+  id             String   @id @default(uuid())
+  groupId        String   @map("group_id")
+  file           String
+  aiExtraction   Json?    @map("ai_extraction")
+  currency       String   @default("USD")
+  originalAmount Decimal  @db.Decimal(14, 2) @map("original_amount")
+  fxRate         Decimal  @default(1.0) @db.Decimal(18, 6) @map("fx_rate")
+  fxRateDate     DateTime @default(now()) @map("fx_rate_date")
+  sourceLanguage String?  @map("source_language")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  group Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@index([groupId])
+  @@map("receipts")
+}
+
+model Allocation {
+  id              String   @id @default(uuid())
+  groupId         String   @map("group_id")
+  memberId        String   @map("member_id")
+  goodsTotal      Decimal  @db.Decimal(14, 2) @map("goods_total")
+  sharedCostShare Decimal  @db.Decimal(14, 2) @map("shared_cost_share")
+  netOwedOrRefund Decimal  @db.Decimal(14, 2) @map("net_owed_or_refund")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  group  Group  @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, memberId])
+  @@index([groupId])
+  @@index([memberId])
+  @@map("allocations")
+}
+
+model LedgerEntry {
+  id             String          @id @default(uuid())
+  groupId        String          @map("group_id")
+  memberId       String?         @map("member_id")
+  type           LedgerEntryType
+  amount         Decimal         @db.Decimal(14, 2)
+  originalAmount Decimal         @db.Decimal(14, 2) @map("original_amount")
+  currency       String          @default("USD")
+  fxRate         Decimal         @default(1.0) @db.Decimal(18, 6) @map("fx_rate")
+  fxRateDate     DateTime        @default(now()) @map("fx_rate_date")
+  paypalRef      String          @map("paypal_ref")
+  description    String?
+  createdAt      DateTime        @default(now()) @map("created_at")
+
+  group  Group   @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  member Member? @relation(fields: [memberId], references: [id], onDelete: SetNull)
+
+  @@index([groupId])
+  @@index([memberId])
+  @@map("ledger_entries")
+}
+
