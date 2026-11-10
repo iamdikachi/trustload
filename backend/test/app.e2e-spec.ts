@@ -1090,4 +1090,214 @@ describe('TrustLoad API (e2e)', () => {
       convertedInCode: true,
     });
   });
+
+  it('POST /groups/:groupId/receipts & POST /groups/:groupId/receipts/allocate — reads final receipts, assigns goods to the vendor who ordered them, splits shared costs proportionally to goods value (or by configurable rule), and reconciles all totals with the pot (FR6)', async () => {
+    expect(createdGroupId).toBeDefined();
+    expect(memberIds).toHaveLength(5);
+
+    // 1. Upload Final Receipt #1 (Shenzhen Electronics & Freight in CNY; 1 CNY = 0.138889 USD):
+    //    - 40 Power Banks: 3600 CNY ($500 USD) -> 100% Vendor One
+    //    - 50 GaN Chargers: 7200 CNY ($1000 USD) -> 20/50 (40% = $400 USD) Vendor One, 30/50 (60% = $600 USD) Vendor Five
+    //    - 25 Label Printers: 5400 CNY ($750 USD) -> 100% Vendor Three
+    //    - Shared Cost (Air Freight & Customs): 1440 CNY ($200 USD)
+    const shenzhenFinalReceiptBuffer = Buffer.from(
+      [
+        '%PDF-1.4',
+        'Supplier: Shenzhen Golden Dragon Electronics & Logistics',
+        'Date: 2026-03-20',
+        'Currency: CNY',
+        'Item: 20000mAh Type-C 笔记本移动电源 | Qty: 40 | UnitPrice: 90.00 | Total: 3600.00',
+        'Item: 100W 氮化镓桌面充电器 | Qty: 50 | UnitPrice: 144.00 | Total: 7200.00',
+        'Item: 蓝牙标签打印机 Bluetooth Label Printer | Qty: 25 | UnitPrice: 216.00 | Total: 5400.00',
+        'SharedCost: International Air Freight & Customs Clearance Fee | Total: 1440.00',
+        'GrandTotal: 17640.00',
+      ].join('\n'),
+      'utf-8',
+    );
+
+    const receipt1Res = await request(app.getHttpServer())
+      .post(`/groups/${createdGroupId}/receipts`)
+      .field('supplier', 'Shenzhen Golden Dragon Electronics & Logistics')
+      .field('currency', 'CNY')
+      .field('sourceLanguage', 'zh-CN')
+      .attach('receipt', shenzhenFinalReceiptBuffer, {
+        filename: 'shenzhen-final-receipt.pdf',
+        contentType: 'application/pdf',
+      })
+      .expect(201);
+
+    if (receipt1Res.body.file) {
+      createdAuditPaths.push(receipt1Res.body.file);
+    }
+
+    expect(receipt1Res.body).toMatchObject({
+      groupId: createdGroupId,
+      currency: 'CNY',
+      originalCurrency: 'CNY',
+      originalAmount: '17640',
+      fxRate: '0.138889',
+      rateUsed: 0.138889,
+      convertedBaseAmount: 2450,
+      baseCurrency: 'USD',
+      convertedInCode: true,
+    });
+
+    // 2. Run AI Final Receipt Allocation with Receipt #2 (Istanbul & Dubai Goods + Local Transport Fee in USD)
+    //    under PROPORTIONAL_TO_VALUE rule:
+    //    - 30 Turkish Cotton Towel Bales: $1050 USD -> 100% Vendor Two
+    //    - 50 Leather Crossbody Handbags: $700 USD -> 100% Vendor Four
+    //    - Shared Cost (Airport Local Transport & Handling): $200 USD
+    const allocateProportionalRes = await request(app.getHttpServer())
+      .post(`/groups/${createdGroupId}/receipts/allocate`)
+      .send({
+        sharedCostRule: 'PROPORTIONAL_TO_VALUE',
+        receipts: [
+          {
+            supplier: 'Istanbul & Dubai Consolidated Market Receipt',
+            currency: 'USD',
+            grandTotal: 1950,
+            lineItems: [
+              {
+                description: 'Turkish Cotton Towel Bale',
+                quantity: 30,
+                unitPrice: 35,
+                total: 1050,
+              },
+              {
+                description: 'Leather Crossbody Handbag',
+                quantity: 50,
+                unitPrice: 14,
+                total: 700,
+              },
+            ],
+            sharedCosts: [
+              {
+                description:
+                  'Airport Local Transport & Consolidation Handling Fee',
+                amount: 200,
+              },
+            ],
+          },
+        ],
+      })
+      .expect(201);
+
+    expect(allocateProportionalRes.body).toMatchObject({
+      groupId: createdGroupId,
+      baseCurrency: 'USD',
+      sharedCostRule: 'PROPORTIONAL_TO_VALUE',
+      receiptCount: 2,
+      totals: {
+        totalGoods: 4000,
+        totalSharedCosts: 400,
+        totalAllocatedSpend: 4400,
+        totalEffectiveContribution: 4600,
+        totalNetOwedOrRefund: 200,
+        totalRefundsDue: 235,
+        totalAmountOwed: 35,
+      },
+      reconciliation: {
+        baseCurrency: 'USD',
+        effectivePotBaseline: 4600,
+        totalGoodsAllocated: 4000,
+        totalSharedCostsAllocated: 400,
+        totalReceiptSpend: 4400,
+        totalNetOwedOrRefund: 200,
+        totalRefundsDue: 235,
+        totalAmountOwed: 35,
+        unspentPotBalance: 200,
+        discrepancy: 0,
+        reconciledWithPot: true,
+      },
+    });
+
+    const vAllocations = allocateProportionalRes.body.vendorAllocations;
+    expect(vAllocations).toHaveLength(5);
+
+    // Vendor 1 ($1000 paid): Goods = $500 (Power Banks) + $400 (40% of GaN Chargers) = $900; Shared Cost (22.5% of $400) = $90; Net Refund = +$10
+    expect(vAllocations[0]).toMatchObject({
+      memberId: memberIds[0],
+      goodsTotal: 900,
+      goodsValueSharePct: 22.5,
+      sharedCostShare: 90,
+      totalAllocatedSpend: 990,
+      netOwedOrRefund: 10,
+      refundDue: 10,
+      amountOwed: 0,
+      settlementDirection: 'REFUND_DUE',
+    });
+
+    // Vendor 2 ($1200 paid): Goods = $1050 (Towels); Shared Cost (26.25% of $400) = $105; Net Refund = +$45
+    expect(vAllocations[1]).toMatchObject({
+      memberId: memberIds[1],
+      goodsTotal: 1050,
+      goodsValueSharePct: 26.25,
+      sharedCostShare: 105,
+      totalAllocatedSpend: 1155,
+      netOwedOrRefund: 45,
+      refundDue: 45,
+      amountOwed: 0,
+      settlementDirection: 'REFUND_DUE',
+    });
+
+    // Vendor 3 ($800 contribution): Goods = $750 (Printers); Shared Cost (18.75% of $400) = $75; Total = $825 -> Owes $25 (-$25)
+    expect(vAllocations[2]).toMatchObject({
+      memberId: memberIds[2],
+      goodsTotal: 750,
+      goodsValueSharePct: 18.75,
+      sharedCostShare: 75,
+      totalAllocatedSpend: 825,
+      netOwedOrRefund: -25,
+      refundDue: 0,
+      amountOwed: 25,
+      settlementDirection: 'AMOUNT_OWED',
+    });
+
+    // Vendor 4 ($950 contribution): Goods = $700 (Handbags); Shared Cost (17.5% of $400) = $70; Total = $770 -> Refund = +$180
+    expect(vAllocations[3]).toMatchObject({
+      memberId: memberIds[3],
+      goodsTotal: 700,
+      goodsValueSharePct: 17.5,
+      sharedCostShare: 70,
+      totalAllocatedSpend: 770,
+      netOwedOrRefund: 180,
+      refundDue: 180,
+      amountOwed: 0,
+      settlementDirection: 'REFUND_DUE',
+    });
+
+    // Vendor 5 ($650 contribution): Goods = $600 (60% of GaN Chargers); Shared Cost (15% of $400) = $60; Total = $660 -> Owes $10 (-$10)
+    expect(vAllocations[4]).toMatchObject({
+      memberId: memberIds[4],
+      goodsTotal: 600,
+      goodsValueSharePct: 15,
+      sharedCostShare: 60,
+      totalAllocatedSpend: 660,
+      netOwedOrRefund: -10,
+      refundDue: 0,
+      amountOwed: 10,
+      settlementDirection: 'AMOUNT_OWED',
+    });
+
+    // 3. Verify configurable rule: switch group sharedCostRule to EQUAL ($400 / 5 vendors = $80 each)
+    const allocateEqualRes = await request(app.getHttpServer())
+      .post(`/groups/${createdGroupId}/receipts/allocate`)
+      .send({
+        sharedCostRule: 'EQUAL',
+      })
+      .expect(201);
+
+    expect(allocateEqualRes.body.sharedCostRule).toBe('EQUAL');
+    expect(allocateEqualRes.body.reconciliation).toMatchObject({
+      totalGoodsAllocated: 4000,
+      totalSharedCostsAllocated: 400,
+      totalReceiptSpend: 4400,
+      unspentPotBalance: 200,
+      discrepancy: 0,
+      reconciledWithPot: true,
+    });
+    for (const va of allocateEqualRes.body.vendorAllocations) {
+      expect(va.sharedCostShare).toBe(80);
+    }
+  });
 });
