@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { createObserveModule } from '@nestjs/observe';
+import { AiModule } from './ai/ai.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { ContributionsModule } from './contributions/contributions.module';
@@ -25,6 +26,7 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
     ContributionsModule,
     ReleaseRequestsModule,
     SettlementModule,
+    AiModule,
   ],
   controllers: [AppController],
   providers: [AppService],

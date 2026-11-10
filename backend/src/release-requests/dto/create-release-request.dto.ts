@@ -54,3 +54,31 @@ export class CreateReleaseRequestDto {
   invoice?: any;
 }
 
+export class ConvertFxRateDto {
+  @ApiProperty({
+    example: 7200,
+    description: 'Original invoice amount to convert in code',
+  })
+  originalAmount!: number;
+
+  @ApiProperty({
+    example: 'CNY',
+    description: '3-letter ISO currency code of the original invoice (e.g. CNY, AED, TRY)',
+  })
+  fromCurrency!: string;
+
+  @ApiPropertyOptional({
+    example: 'USD',
+    default: 'USD',
+    description: 'Target group base currency (defaults to USD)',
+  })
+  toBaseCurrency?: string;
+
+  @ApiPropertyOptional({
+    example: 0.138889,
+    description: 'Optional custom FX rate override',
+  })
+  customRate?: number | string;
+}
+
+

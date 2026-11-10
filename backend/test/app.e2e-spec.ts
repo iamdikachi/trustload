@@ -18,6 +18,7 @@ describe('TrustLoad API (e2e)', () => {
   let memberIds: string[] = [];
   let createdReleaseRequestId: string | undefined;
   let uploadedInvoicePath: string | undefined;
+  const createdAuditPaths: string[] = [];
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -34,6 +35,10 @@ describe('TrustLoad API (e2e)', () => {
     if (uploadedInvoicePath) {
       const fullPath = path.resolve(process.cwd(), uploadedInvoicePath);
       await fs.promises.unlink(fullPath).catch(() => undefined);
+    }
+    for (const auditRelPath of createdAuditPaths) {
+      const fullAuditPath = path.resolve(process.cwd(), auditRelPath);
+      await fs.promises.unlink(fullAuditPath).catch(() => undefined);
     }
     if (createdGroupId) {
       await prisma.group
@@ -316,6 +321,9 @@ describe('TrustLoad API (e2e)', () => {
     expect(releaseId).toBeDefined();
     createdReleaseRequestId = releaseId;
     uploadedInvoicePath = createReleaseRes.body.invoiceFile;
+    if (createReleaseRes.body.aiExtractedData?.auditFilePath) {
+      createdAuditPaths.push(createReleaseRes.body.aiExtractedData.auditFilePath);
+    }
 
     expect(createReleaseRes.body).toMatchObject({
       groupId: createdGroupId,
@@ -585,5 +593,501 @@ describe('TrustLoad API (e2e)', () => {
       (e: { type: string }) => e.type === 'REFUND',
     );
     expect(refundLedgerEntries).toHaveLength(2);
+  });
+
+  it('POST /ai/invoices/extract — extracts structured JSON matching the schema for both a clean invoice and a blurry, mixed-language invoice (FR4)', async () => {
+    // 1. Clean Chinese invoice with structured line items
+    const cleanInvoiceBuffer = Buffer.from(
+      [
+        '%PDF-1.4',
+        'Supplier: 深圳市金龙电子有限公司 (Shenzhen Golden Dragon Electronics Co., Ltd.)',
+        'Date: 2026-03-14',
+        'Currency: CNY',
+        'Item: 20000mAh Type-C 笔记本移动电源 | Qty: 40 | UnitPrice: 110.00 | Total: 4400.00',
+        'Item: 100W 氮化镓桌面充电器 | Qty: 20 | UnitPrice: 140.00 | Total: 2800.00',
+        'GrandTotal: 7200.00',
+      ].join('\n'),
+      'utf-8',
+    );
+
+    const cleanRes = await request(app.getHttpServer())
+      .post('/ai/invoices/extract')
+      .attach('invoice', cleanInvoiceBuffer, {
+        filename: 'clean-shenzhen-invoice.pdf',
+        contentType: 'application/pdf',
+      })
+      .expect(201);
+
+    if (cleanRes.body.auditFilePath) {
+      createdAuditPaths.push(cleanRes.body.auditFilePath);
+    }
+
+    // Validate full schema on clean invoice
+    expect(cleanRes.body).toMatchObject({
+      supplier: expect.any(String),
+      date: '2026-03-14',
+      currency: 'CNY',
+      originalCurrency: 'CNY',
+      sourceLanguage: 'zh-CN',
+      grandTotal: 7200,
+      isBlurryOrNoisy: false,
+      requiresManualReview: false,
+      confidencePerField: {
+        supplier: expect.any(Number),
+        date: expect.any(Number),
+        originalCurrency: expect.any(Number),
+        grandTotal: expect.any(Number),
+        sourceLanguage: expect.any(Number),
+        lineItems: expect.any(Number),
+      },
+    });
+    expect(cleanRes.body.overallConfidence).toBeGreaterThanOrEqual(0.9);
+    expect(cleanRes.body.lowConfidenceFields).toEqual([]);
+    expect(cleanRes.body.lineItems).toHaveLength(2);
+    expect(cleanRes.body.lineItems[0]).toMatchObject({
+      description: 'Type-C Laptop Power Bank 20000mAh',
+      originalDescription: '20000mAh Type-C 笔记本移动电源',
+      translatedDescription: 'Type-C Laptop Power Bank 20000mAh',
+      quantity: 40,
+      unitPrice: 110,
+      total: 4400,
+      lineTotal: 4400,
+      confidence: expect.any(Number),
+      fieldConfidence: {
+        description: expect.any(Number),
+        quantity: expect.any(Number),
+        unitPrice: expect.any(Number),
+        total: expect.any(Number),
+      },
+    });
+
+    // 2. Blurry, mixed-language (Chinese + Arabic + English) handwritten market receipt
+    const blurryMixedInvoiceBuffer = Buffer.from(
+      [
+        'BLURRY HANDWRITTEN MARKET RECEIPT — 广州 & دبي (Guangzhou / Dubai)',
+        'Supplier: 广州白云皮具城 / سوق نايف للتجارة (Guangzhou Baiyun & Naif Trading)',
+        'Date: 2026-03-16',
+        'Currency: CNY',
+        'Item: 真皮斜挎包 حقيبة يد جلدية Leather Crossbody Handbag | Qty: 50 | UnitPrice: 135.00 | Total: 6750.00',
+        'Item: 蓝牙标签打印机 طابعة ملصقات Bluetooth Label Printer | Qty: 25 | UnitPrice: 230.00 | Total: 5750.00',
+        'GrandTotal: 12500.00',
+      ].join('\n'),
+      'utf-8',
+    );
+
+    const blurryRes = await request(app.getHttpServer())
+      .post('/ai/invoices/extract')
+      .attach('invoice', blurryMixedInvoiceBuffer, {
+        filename: 'blurry-mixed-guangzhou-dubai-receipt.jpg',
+        contentType: 'image/jpeg',
+      })
+      .expect(201);
+
+    if (blurryRes.body.auditFilePath) {
+      createdAuditPaths.push(blurryRes.body.auditFilePath);
+    }
+
+    // Validate full schema on blurry, mixed-language invoice
+    expect(blurryRes.body).toMatchObject({
+      supplier: expect.any(String),
+      date: '2026-03-16',
+      currency: 'CNY',
+      originalCurrency: 'CNY',
+      grandTotal: 12500,
+      isBlurryOrNoisy: true,
+      requiresManualReview: true,
+      confidencePerField: {
+        supplier: expect.any(Number),
+        date: expect.any(Number),
+        originalCurrency: expect.any(Number),
+        grandTotal: expect.any(Number),
+        sourceLanguage: expect.any(Number),
+        lineItems: expect.any(Number),
+      },
+    });
+    expect(blurryRes.body.sourceLanguage).toContain('mixed');
+    expect(blurryRes.body.lowConfidenceFields.length).toBeGreaterThan(0);
+    expect(blurryRes.body.lineItems).toHaveLength(2);
+    expect(blurryRes.body.lineItems[0]).toMatchObject({
+      description: 'Leather Crossbody Handbag',
+      quantity: 50,
+      unitPrice: 135,
+      total: 6750,
+      lineTotal: 6750,
+      confidence: expect.any(Number),
+      fieldConfidence: {
+        description: expect.any(Number),
+        quantity: expect.any(Number),
+        unitPrice: expect.any(Number),
+        total: expect.any(Number),
+      },
+    });
+    expect(blurryRes.body.lineItems[1]).toMatchObject({
+      description: 'Bluetooth Label Printer',
+      quantity: 25,
+      unitPrice: 230,
+      total: 5750,
+      lineTotal: 5750,
+    });
+  });
+
+  it('POST /groups/:groupId/invoices/verify & POST /release-requests/:id/verify — compares extracted invoices against the group combined order and flags deliberately wrong invoices (inflated quantity, wrong total, unordered item, or price spike) with clear reasons (FR4)', async () => {
+    expect(createdGroupId).toBeDefined();
+    expect(createdReleaseRequestId).toBeDefined();
+
+    // 1. Verify the clean Release Request #1 against the group's combined order
+    const validVerifyRes = await request(app.getHttpServer())
+      .post(`/release-requests/${createdReleaseRequestId}/verify`)
+      .send({})
+      .expect(201);
+
+    expect(validVerifyRes.body).toMatchObject({
+      groupId: createdGroupId,
+      releaseRequestId: createdReleaseRequestId,
+      passedAllChecks: true,
+      status: 'VERIFIED',
+      flagCount: 0,
+      checks: {
+        itemsMatch: { passed: true, matchedCount: 2, unmatchedCount: 0 },
+        quantitiesWithinOrder: { passed: true },
+        lineTotalsAddUp: {
+          passed: true,
+          computedLineSum: 7200,
+          statedGrandTotal: 7200,
+          discrepancy: 0,
+        },
+        invoiceTotalWithinRequestedAmount: {
+          passed: true,
+          invoiceOriginalTotal: 7200,
+          requestedOriginalAmount: 7200,
+        },
+        pricesReasonable: { passed: true },
+      },
+    });
+    expect(validVerifyRes.body.flags).toEqual([]);
+
+    // 2. Deliberately Wrong Invoice #1: Inflated Quantity (65 Power Banks billed vs 40 ordered)
+    const inflatedQtyInvoiceBuffer = Buffer.from(
+      [
+        '%PDF-1.4',
+        'Supplier: Shenzhen Golden Dragon Electronics Co.',
+        'Date: 2026-03-18',
+        'Currency: CNY',
+        'Item: 20000mAh Type-C 笔记本移动电源 | Qty: 65 | UnitPrice: 108.00 | Total: 7020.00',
+        'GrandTotal: 7020.00',
+      ].join('\n'),
+      'utf-8',
+    );
+
+    const inflatedQtyRes = await request(app.getHttpServer())
+      .post(`/groups/${createdGroupId}/invoices/verify`)
+      .field('requestedAmount', '7020')
+      .field('requestedAmountCurrency', 'CNY')
+      .attach('invoice', inflatedQtyInvoiceBuffer, {
+        filename: 'deliberately-inflated-quantity-invoice.pdf',
+        contentType: 'application/pdf',
+      })
+      .expect(201);
+
+    if (inflatedQtyRes.body.extraction?.sourceFile) {
+      createdAuditPaths.push(inflatedQtyRes.body.extraction.sourceFile);
+    }
+
+    expect(inflatedQtyRes.body).toMatchObject({
+      groupId: createdGroupId,
+      passedAllChecks: false,
+      status: 'FLAGGED',
+      checks: {
+        itemsMatch: { passed: true, matchedCount: 1, unmatchedCount: 0 },
+        quantitiesWithinOrder: { passed: false },
+        lineTotalsAddUp: { passed: true },
+      },
+    });
+
+    const qtyFlag = inflatedQtyRes.body.flags.find(
+      (f: { code: string }) => f.code === 'QUANTITY_EXCEEDS_ORDER',
+    );
+    expect(qtyFlag).toBeDefined();
+    expect(qtyFlag).toMatchObject({
+      code: 'QUANTITY_EXCEEDS_ORDER',
+      severity: 'HIGH',
+      check: 'quantitiesWithinOrder',
+      item: 'Type-C Laptop Power Bank 20000mAh',
+      expected: 40,
+      actual: 65,
+    });
+    expect(qtyFlag.reason).toContain('65');
+    expect(qtyFlag.reason).toContain('40');
+
+    // 3. Deliberately Wrong Invoice #2: Wrong Grand Total & Line Total Arithmetic Mismatch + Exceeds Requested Amount
+    const wrongTotalsRes = await request(app.getHttpServer())
+      .post(`/groups/${createdGroupId}/invoices/verify`)
+      .send({
+        supplier: 'Istanbul Grand Bazaar Textiles',
+        currency: 'TRY',
+        grandTotal: 52000, // Deliberately wrong grand total (line states 41400)
+        requestedAmount: 40800, // Exceeds traveler's requested release amount of 40800 TRY
+        requestedAmountCurrency: 'TRY',
+        lineItems: [
+          {
+            description: 'Turkish Cotton Towel Bale',
+            quantity: 30,
+            unitPrice: 1360,
+            total: 41400, // Deliberately wrong line total (30 * 1360 = 40800, not 41400)
+          },
+        ],
+      })
+      .expect(201);
+
+    expect(wrongTotalsRes.body).toMatchObject({
+      groupId: createdGroupId,
+      passedAllChecks: false,
+      status: 'FLAGGED',
+      checks: {
+        itemsMatch: { passed: true },
+        quantitiesWithinOrder: { passed: true },
+        lineTotalsAddUp: {
+          passed: false,
+          computedLineSum: 41400,
+          statedGrandTotal: 52000,
+          discrepancy: 10600,
+        },
+        invoiceTotalWithinRequestedAmount: {
+          passed: false,
+          invoiceOriginalTotal: 52000,
+          requestedOriginalAmount: 40800,
+        },
+      },
+    });
+
+    const flagCodes = wrongTotalsRes.body.flags.map(
+      (f: { code: string }) => f.code,
+    );
+    expect(flagCodes).toContain('LINE_TOTAL_ARITHMETIC_MISMATCH');
+    expect(flagCodes).toContain('GRAND_TOTAL_MISMATCH');
+    expect(flagCodes).toContain('INVOICE_TOTAL_EXCEEDS_REQUESTED_AMOUNT');
+
+    // 4. Deliberately Wrong Invoice #3: Price Far Above Earlier Price & Unordered Item
+    const priceSpikeAndUnorderedRes = await request(app.getHttpServer())
+      .post(`/groups/${createdGroupId}/invoices/verify`)
+      .send({
+        supplier: 'Guangzhou Electronics Market',
+        currency: 'CNY',
+        grandTotal: 4200,
+        lineItems: [
+          {
+            // Earlier invoice in this group was 144 CNY ($20 USD) per unit; 220 CNY ($30.56 USD) is +52.8% higher
+            description: 'GaN 100W Desktop Charger',
+            quantity: 10,
+            unitPrice: 220,
+            total: 2200,
+          },
+          {
+            // Item not in the group's combined order
+            description: 'Luxury Automatic Wristwatch',
+            quantity: 2,
+            unitPrice: 1000,
+            total: 2000,
+          },
+        ],
+      })
+      .expect(201);
+
+    expect(priceSpikeAndUnorderedRes.body).toMatchObject({
+      groupId: createdGroupId,
+      passedAllChecks: false,
+      status: 'FLAGGED',
+      checks: {
+        itemsMatch: { passed: false, matchedCount: 1, unmatchedCount: 1 },
+        pricesReasonable: { passed: false },
+      },
+    });
+
+    const spikeAndUnorderedCodes = priceSpikeAndUnorderedRes.body.flags.map(
+      (f: { code: string }) => f.code,
+    );
+    expect(spikeAndUnorderedCodes).toContain('PRICE_SPIKE_ABOVE_EARLIER_PRICE');
+    expect(spikeAndUnorderedCodes).toContain('UNORDERED_ITEM');
+  });
+
+  it('GET /fx-rates, POST /fx-rates/convert, & GET /groups/:groupId/ledger — converts every invoice total in code using the fixed exchange rate table with stored date, and shows both a Yuan (CNY) invoice and a Dirham (AED) invoice with original amount, rate used, and converted base-currency amount in the ledger', async () => {
+    expect(createdGroupId).toBeDefined();
+    expect(memberIds.length).toBeGreaterThanOrEqual(3);
+
+    // 1. Inspect fixed exchange rate table (GET /fx-rates)
+    const rateTableRes = await request(app.getHttpServer())
+      .get('/fx-rates?baseCurrency=USD')
+      .expect(200);
+
+    expect(rateTableRes.body).toMatchObject({
+      baseCurrency: 'USD',
+      fxRateDate: '2026-11-08T00:00:00.000Z',
+      source: 'FIXED_RATE_TABLE',
+      convertedInCode: true,
+    });
+
+    const cnyRateEntry = rateTableRes.body.rates.find(
+      (r: { currency: string }) => r.currency === 'CNY',
+    );
+    const aedRateEntry = rateTableRes.body.rates.find(
+      (r: { currency: string }) => r.currency === 'AED',
+    );
+    expect(cnyRateEntry).toMatchObject({
+      currency: 'CNY',
+      fxRate: 0.138889,
+      rateUsed: 0.138889,
+      fxRateDate: '2026-11-08T00:00:00.000Z',
+    });
+    expect(aedRateEntry).toMatchObject({
+      currency: 'AED',
+      fxRate: 0.272294,
+      rateUsed: 0.272294,
+      fxRateDate: '2026-11-08T00:00:00.000Z',
+    });
+
+    // 2. Test deterministic code-level conversion endpoint (POST /fx-rates/convert) for both CNY and AED
+    const cnyConvertRes = await request(app.getHttpServer())
+      .post('/fx-rates/convert')
+      .send({
+        originalAmount: 7200,
+        fromCurrency: 'CNY',
+        toBaseCurrency: 'USD',
+      })
+      .expect(201);
+
+    expect(cnyConvertRes.body).toMatchObject({
+      originalAmount: 7200,
+      originalCurrency: 'CNY',
+      baseCurrency: 'USD',
+      fxRate: 0.138889,
+      rateUsed: 0.138889,
+      rateDate: '2026-11-08T00:00:00.000Z',
+      convertedBaseAmount: 1000,
+      convertedInCode: true,
+    });
+
+    const aedConvertRes = await request(app.getHttpServer())
+      .post('/fx-rates/convert')
+      .send({
+        originalAmount: 3672.5,
+        fromCurrency: 'AED',
+        toBaseCurrency: 'USD',
+      })
+      .expect(201);
+
+    expect(aedConvertRes.body).toMatchObject({
+      originalAmount: 3672.5,
+      originalCurrency: 'AED',
+      baseCurrency: 'USD',
+      fxRate: 0.272294,
+      rateUsed: 0.272294,
+      rateDate: '2026-11-08T00:00:00.000Z',
+      convertedBaseAmount: 1000,
+      convertedInCode: true,
+    });
+
+    // 3. Submit a UAE Dirham (AED) release request (3672.50 AED -> 1000.00 USD at stored rate 0.272294)
+    const dirhamPdfBuffer = Buffer.from(
+      [
+        '%PDF-1.4',
+        'Supplier: Al Ras Royal Leather & Textiles LLC (Deira, Dubai)',
+        'Date: 2026-03-19',
+        'Currency: AED',
+        'Item: حقيبة يد جلدية Leather Crossbody Handbag | Qty: 50 | UnitPrice: 73.45 | Total: 3672.50',
+        'GrandTotal: 3672.50',
+      ].join('\n'),
+      'utf-8',
+    );
+
+    const aedReleaseRes = await request(app.getHttpServer())
+      .post(`/groups/${createdGroupId}/release-requests`)
+      .field('amount', '3672.50')
+      .field('supplier', 'Al Ras Royal Leather & Textiles LLC (Deira, Dubai)')
+      .field('currency', 'AED')
+      .field('sourceLanguage', 'ar-AE')
+      .attach('invoice', dirhamPdfBuffer, {
+        filename: 'dubai-deira-dirham-invoice.pdf',
+        contentType: 'application/pdf',
+      })
+      .expect(201);
+
+    if (aedReleaseRes.body.invoiceFile) {
+      createdAuditPaths.push(aedReleaseRes.body.invoiceFile);
+    }
+
+    const aedReleaseId: string = aedReleaseRes.body.id;
+    expect(aedReleaseRes.body).toMatchObject({
+      id: aedReleaseId,
+      groupId: createdGroupId,
+      currency: 'AED',
+      originalCurrency: 'AED',
+      originalAmount: '3672.5',
+      fxRate: '0.272294',
+      rateUsed: 0.272294,
+      rateDate: '2026-11-08T00:00:00.000Z',
+      amount: '1000',
+      convertedBaseAmount: 1000,
+      baseCurrency: 'USD',
+      convertedInCode: true,
+    });
+
+    // 4. Approve the Dirham (AED) release request across the 3-member threshold so it writes to the group ledger
+    for (let i = 0; i < 3; i++) {
+      await request(app.getHttpServer())
+        .post(`/release-requests/${aedReleaseId}/approvals`)
+        .send({
+          memberId: memberIds[i],
+          decision: 'APPROVED',
+          comment: `Approved Dirham invoice by Vendor ${i + 1}`,
+        })
+        .expect(201);
+    }
+
+    // 5. Fetch the group ledger and verify BOTH the Yuan (CNY) invoice and Dirham (AED) invoice show:
+    //    - originalAmount
+    //    - rateUsed / fxRate (and rateDate / fxRateDate)
+    //    - convertedBaseAmount / amount in baseCurrency (USD)
+    const ledgerRes = await request(app.getHttpServer())
+      .get(`/groups/${createdGroupId}/ledger`)
+      .expect(200);
+
+    const yuanLedgerEntry = ledgerRes.body.ledgerEntries.find(
+      (e: { type: string; currency: string }) =>
+        e.type === 'STAGED_RELEASE' && e.currency === 'CNY',
+    );
+    const dirhamLedgerEntry = ledgerRes.body.ledgerEntries.find(
+      (e: { type: string; currency: string }) =>
+        e.type === 'STAGED_RELEASE' && e.currency === 'AED',
+    );
+
+    expect(yuanLedgerEntry).toBeDefined();
+    expect(yuanLedgerEntry).toMatchObject({
+      type: 'STAGED_RELEASE',
+      currency: 'CNY',
+      originalCurrency: 'CNY',
+      originalAmount: '7200',
+      fxRate: '0.138889',
+      rateUsed: 0.138889,
+      rateDate: '2026-11-08T00:00:00.000Z',
+      amount: '-1000',
+      convertedBaseAmount: 1000,
+      baseCurrency: 'USD',
+      convertedInCode: true,
+    });
+
+    expect(dirhamLedgerEntry).toBeDefined();
+    expect(dirhamLedgerEntry).toMatchObject({
+      type: 'STAGED_RELEASE',
+      currency: 'AED',
+      originalCurrency: 'AED',
+      originalAmount: '3672.5',
+      fxRate: '0.272294',
+      rateUsed: 0.272294,
+      rateDate: '2026-11-08T00:00:00.000Z',
+      amount: '-1000',
+      convertedBaseAmount: 1000,
+      baseCurrency: 'USD',
+      convertedInCode: true,
+    });
   });
 });

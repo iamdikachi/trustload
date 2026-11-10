@@ -8,8 +8,12 @@ import {
 import {
   ApprovalDecision,
   LedgerEntryType,
+  Prisma,
   ReleaseRequestStatus,
 } from '@prisma/client';
+import { AiExtractionService } from '../ai/ai-extraction.service';
+import { AiVerificationService } from '../ai/ai-verification.service';
+import type { VerifyInvoiceDto } from '../ai/dto/verify-invoice.dto';
 import { PaypalService } from '../contributions/paypal.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateReleaseRequestDto } from './dto/create-release-request.dto';
@@ -62,6 +66,8 @@ export class ReleaseRequestsService {
     private readonly prisma: PrismaService,
     private readonly fxRatesService: FxRatesService,
     private readonly paypalService: PaypalService,
+    private readonly aiExtractionService: AiExtractionService,
+    private readonly aiVerificationService: AiVerificationService,
   ) {}
 
   async createReleaseRequest(
@@ -131,6 +137,42 @@ export class ReleaseRequestsService {
         ? Number(rawAmount.toFixed(2))
         : this.fxRatesService.convertAmount(originalAmount, fxRate);
 
+    const fileBuffer =
+      file.buffer ??
+      (file.path ? await fs.promises.readFile(file.path) : Buffer.alloc(0));
+
+    const extraction = await this.aiExtractionService.extractInvoiceBuffer({
+      buffer: fileBuffer,
+      mimeType: file.mimetype || 'application/pdf',
+      originalName: file.originalname || path.basename(storedFilePath),
+      sourceFile: storedFilePath,
+      supplierHint: supplier,
+      currencyHint: currency,
+      amountHint: originalAmount,
+      languageHint: dto?.sourceLanguage,
+      baseCurrency: group.baseCurrency,
+    });
+
+    const verification =
+      await this.aiVerificationService.verifyExtractionAgainstGroupOrder({
+        groupId: group.id,
+        extraction,
+        requestedAmount: originalAmount,
+        requestedAmountCurrency: currency,
+        explicitFxRate: fxRate,
+      });
+
+    const mergedAiReport = {
+      ...extraction,
+      passedAllChecks: verification.passedAllChecks,
+      verificationStatus: verification.status,
+      flags: verification.flags,
+      checks: verification.checks,
+      lineItemMatches: verification.lineItemMatches,
+      verificationSummary: verification.summary,
+      verification,
+    };
+
     const extraFields: Record<string, unknown> = { supplier };
     const releaseRequest = await this.prisma.releaseRequest.create({
       data: {
@@ -141,8 +183,10 @@ export class ReleaseRequestsService {
         originalAmount: originalAmount.toFixed(2),
         fxRate: fxRate.toFixed(6),
         fxRateDate,
-        sourceLanguage: dto?.sourceLanguage?.trim() || null,
+        sourceLanguage:
+          dto?.sourceLanguage?.trim() || extraction.sourceLanguage || null,
         invoiceFile: storedFilePath,
+        aiReport: mergedAiReport as unknown as Prisma.InputJsonValue,
         status: PENDING_STATUS,
       },
       include: {
@@ -160,8 +204,114 @@ export class ReleaseRequestsService {
 
     return {
       ...releaseRequest,
+      originalCurrency: releaseRequest.currency,
+      baseCurrency: group.baseCurrency,
+      rateUsed: Number(releaseRequest.fxRate),
+      rateDate: releaseRequest.fxRateDate.toISOString(),
+      convertedBaseAmount: Number(releaseRequest.amount),
+      convertedInCode: true,
       isPending: PENDING_RELEASE_STATUSES.has(releaseRequest.status),
     };
+  }
+
+  getRateTable(baseCurrency?: string) {
+    return this.fxRatesService.getRateTable(baseCurrency);
+  }
+
+  convertCurrencyInCode(params: {
+    originalAmount: number;
+    fromCurrency: string;
+    toBaseCurrency?: string;
+    customRate?: number | string;
+  }) {
+    return this.fxRatesService.convertInvoiceTotalToBase(params);
+  }
+
+  async extractReleaseRequestInvoice(releaseRequestId: string) {
+    const releaseRequest = await this.prisma.releaseRequest.findUnique({
+      where: { id: releaseRequestId },
+      include: {
+        group: true,
+      },
+    });
+
+    if (!releaseRequest) {
+      throw new NotFoundException(
+        `Release request "${releaseRequestId}" not found.`,
+      );
+    }
+
+    const supplierHint =
+      ((releaseRequest as Record<string, unknown>).supplier as
+        | string
+        | undefined) ?? undefined;
+
+    const extraction = await this.aiExtractionService.extractFromStoredFile({
+      invoiceFilePath: releaseRequest.invoiceFile,
+      supplierHint,
+      currencyHint: releaseRequest.currency,
+      amountHint: Number(releaseRequest.originalAmount),
+      languageHint: releaseRequest.sourceLanguage,
+    });
+
+    const verification =
+      await this.aiVerificationService.verifyExtractionAgainstGroupOrder({
+        groupId: releaseRequest.groupId,
+        releaseRequestId: releaseRequest.id,
+        extraction,
+        requestedAmount: Number(releaseRequest.originalAmount),
+        requestedAmountCurrency: releaseRequest.currency,
+        explicitFxRate: Number(releaseRequest.fxRate),
+      });
+
+    const mergedAiReport = {
+      ...extraction,
+      passedAllChecks: verification.passedAllChecks,
+      verificationStatus: verification.status,
+      flags: verification.flags,
+      checks: verification.checks,
+      lineItemMatches: verification.lineItemMatches,
+      verificationSummary: verification.summary,
+      verification,
+    };
+
+    const updated = await this.prisma.releaseRequest.update({
+      where: { id: releaseRequestId },
+      data: {
+        sourceLanguage: extraction.sourceLanguage,
+        aiReport: mergedAiReport as unknown as Prisma.InputJsonValue,
+      },
+      include: {
+        group: {
+          select: {
+            id: true,
+            name: true,
+            baseCurrency: true,
+            approvalThreshold: true,
+          },
+        },
+        approvals: true,
+      },
+    });
+
+    return {
+      extraction,
+      verification,
+      releaseRequest: {
+        ...updated,
+        isPending: PENDING_RELEASE_STATUSES.has(updated.status),
+      },
+    };
+  }
+
+  async verifyReleaseRequestInvoice(
+    releaseRequestId: string,
+    dto?: VerifyInvoiceDto,
+  ) {
+    return this.aiVerificationService.verifyInvoice(undefined, {
+      ...dto,
+      releaseRequestId,
+    });
   }
 
   async submitApproval(releaseRequestId: string, dto: SubmitApprovalDto) {
@@ -502,7 +652,17 @@ export class ReleaseRequestsService {
             ...updatedRelease,
             isPending: false,
           },
-          ledgerEntry,
+          ledgerEntry: {
+            ...ledgerEntry,
+            originalCurrency: ledgerEntry.currency,
+            baseCurrency: releaseRequest.group.baseCurrency,
+            rateUsed: Number(ledgerEntry.fxRate),
+            rateDate: ledgerEntry.fxRateDate.toISOString(),
+            convertedBaseAmount: Number(
+              Math.abs(Number(ledgerEntry.amount)).toFixed(2),
+            ),
+            convertedInCode: true,
+          },
           paypalPayoutId: payoutResult.payoutBatchId,
         };
       },
