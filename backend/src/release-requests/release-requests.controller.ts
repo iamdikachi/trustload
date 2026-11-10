@@ -118,6 +118,16 @@ export class ReleaseRequestsController {
     stream.pipe(res);
   }
 
+  @Post('release-requests/:id/extract')
+  @ApiOperation({
+    summary:
+      'Run AI multimodal extraction on the stored invoice of a release request and update aiReport (FR4)',
+  })
+  @ApiParam({ name: 'id', description: 'Release Request UUID' })
+  async extractReleaseInvoice(@Param('id') id: string) {
+    return this.releaseRequestsService.extractReleaseRequestInvoice(id);
+  }
+
   @Post('release-requests/:id/approvals')
   @ApiOperation({
     summary:

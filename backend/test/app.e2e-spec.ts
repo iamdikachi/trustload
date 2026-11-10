@@ -18,6 +18,7 @@ describe('TrustLoad API (e2e)', () => {
   let memberIds: string[] = [];
   let createdReleaseRequestId: string | undefined;
   let uploadedInvoicePath: string | undefined;
+  const createdAuditPaths: string[] = [];
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -34,6 +35,10 @@ describe('TrustLoad API (e2e)', () => {
     if (uploadedInvoicePath) {
       const fullPath = path.resolve(process.cwd(), uploadedInvoicePath);
       await fs.promises.unlink(fullPath).catch(() => undefined);
+    }
+    for (const auditRelPath of createdAuditPaths) {
+      const fullAuditPath = path.resolve(process.cwd(), auditRelPath);
+      await fs.promises.unlink(fullAuditPath).catch(() => undefined);
     }
     if (createdGroupId) {
       await prisma.group
@@ -316,6 +321,9 @@ describe('TrustLoad API (e2e)', () => {
     expect(releaseId).toBeDefined();
     createdReleaseRequestId = releaseId;
     uploadedInvoicePath = createReleaseRes.body.invoiceFile;
+    if (createReleaseRes.body.aiExtractedData?.auditFilePath) {
+      createdAuditPaths.push(createReleaseRes.body.aiExtractedData.auditFilePath);
+    }
 
     expect(createReleaseRes.body).toMatchObject({
       groupId: createdGroupId,
@@ -585,5 +593,141 @@ describe('TrustLoad API (e2e)', () => {
       (e: { type: string }) => e.type === 'REFUND',
     );
     expect(refundLedgerEntries).toHaveLength(2);
+  });
+
+  it('POST /ai/invoices/extract — extracts structured JSON matching the schema for both a clean invoice and a blurry, mixed-language invoice (FR4)', async () => {
+    // 1. Clean Chinese invoice with structured line items
+    const cleanInvoiceBuffer = Buffer.from(
+      [
+        '%PDF-1.4',
+        'Supplier: 深圳市金龙电子有限公司 (Shenzhen Golden Dragon Electronics Co., Ltd.)',
+        'Date: 2026-03-14',
+        'Currency: CNY',
+        'Item: 20000mAh Type-C 笔记本移动电源 | Qty: 40 | UnitPrice: 110.00 | Total: 4400.00',
+        'Item: 100W 氮化镓桌面充电器 | Qty: 20 | UnitPrice: 140.00 | Total: 2800.00',
+        'GrandTotal: 7200.00',
+      ].join('\n'),
+      'utf-8',
+    );
+
+    const cleanRes = await request(app.getHttpServer())
+      .post('/ai/invoices/extract')
+      .attach('invoice', cleanInvoiceBuffer, {
+        filename: 'clean-shenzhen-invoice.pdf',
+        contentType: 'application/pdf',
+      })
+      .expect(201);
+
+    if (cleanRes.body.auditFilePath) {
+      createdAuditPaths.push(cleanRes.body.auditFilePath);
+    }
+
+    // Validate full schema on clean invoice
+    expect(cleanRes.body).toMatchObject({
+      supplier: expect.any(String),
+      date: '2026-03-14',
+      currency: 'CNY',
+      originalCurrency: 'CNY',
+      sourceLanguage: 'zh-CN',
+      grandTotal: 7200,
+      isBlurryOrNoisy: false,
+      requiresManualReview: false,
+      confidencePerField: {
+        supplier: expect.any(Number),
+        date: expect.any(Number),
+        originalCurrency: expect.any(Number),
+        grandTotal: expect.any(Number),
+        sourceLanguage: expect.any(Number),
+        lineItems: expect.any(Number),
+      },
+    });
+    expect(cleanRes.body.overallConfidence).toBeGreaterThanOrEqual(0.9);
+    expect(cleanRes.body.lowConfidenceFields).toEqual([]);
+    expect(cleanRes.body.lineItems).toHaveLength(2);
+    expect(cleanRes.body.lineItems[0]).toMatchObject({
+      description: 'Type-C Laptop Power Bank 20000mAh',
+      originalDescription: '20000mAh Type-C 笔记本移动电源',
+      translatedDescription: 'Type-C Laptop Power Bank 20000mAh',
+      quantity: 40,
+      unitPrice: 110,
+      total: 4400,
+      lineTotal: 4400,
+      confidence: expect.any(Number),
+      fieldConfidence: {
+        description: expect.any(Number),
+        quantity: expect.any(Number),
+        unitPrice: expect.any(Number),
+        total: expect.any(Number),
+      },
+    });
+
+    // 2. Blurry, mixed-language (Chinese + Arabic + English) handwritten market receipt
+    const blurryMixedInvoiceBuffer = Buffer.from(
+      [
+        'BLURRY HANDWRITTEN MARKET RECEIPT — 广州 & دبي (Guangzhou / Dubai)',
+        'Supplier: 广州白云皮具城 / سوق نايف للتجارة (Guangzhou Baiyun & Naif Trading)',
+        'Date: 2026-03-16',
+        'Currency: CNY',
+        'Item: 真皮斜挎包 حقيبة يد جلدية Leather Crossbody Handbag | Qty: 50 | UnitPrice: 135.00 | Total: 6750.00',
+        'Item: 蓝牙标签打印机 طابعة ملصقات Bluetooth Label Printer | Qty: 25 | UnitPrice: 230.00 | Total: 5750.00',
+        'GrandTotal: 12500.00',
+      ].join('\n'),
+      'utf-8',
+    );
+
+    const blurryRes = await request(app.getHttpServer())
+      .post('/ai/invoices/extract')
+      .attach('invoice', blurryMixedInvoiceBuffer, {
+        filename: 'blurry-mixed-guangzhou-dubai-receipt.jpg',
+        contentType: 'image/jpeg',
+      })
+      .expect(201);
+
+    if (blurryRes.body.auditFilePath) {
+      createdAuditPaths.push(blurryRes.body.auditFilePath);
+    }
+
+    // Validate full schema on blurry, mixed-language invoice
+    expect(blurryRes.body).toMatchObject({
+      supplier: expect.any(String),
+      date: '2026-03-16',
+      currency: 'CNY',
+      originalCurrency: 'CNY',
+      grandTotal: 12500,
+      isBlurryOrNoisy: true,
+      requiresManualReview: true,
+      confidencePerField: {
+        supplier: expect.any(Number),
+        date: expect.any(Number),
+        originalCurrency: expect.any(Number),
+        grandTotal: expect.any(Number),
+        sourceLanguage: expect.any(Number),
+        lineItems: expect.any(Number),
+      },
+    });
+    expect(blurryRes.body.sourceLanguage).toContain('mixed');
+    expect(blurryRes.body.lowConfidenceFields.length).toBeGreaterThan(0);
+    expect(blurryRes.body.lineItems).toHaveLength(2);
+    expect(blurryRes.body.lineItems[0]).toMatchObject({
+      description: 'Leather Crossbody Handbag',
+      quantity: 50,
+      unitPrice: 135,
+      total: 6750,
+      lineTotal: 6750,
+      confidence: expect.any(Number),
+      fieldConfidence: {
+        description: expect.any(Number),
+        quantity: expect.any(Number),
+        unitPrice: expect.any(Number),
+        total: expect.any(Number),
+      },
+    });
+    expect(blurryRes.body.lineItems[1]).toMatchObject({
+      description: 'Bluetooth Label Printer',
+      quantity: 25,
+      unitPrice: 230,
+      total: 5750,
+      lineTotal: 5750,
+    });
   });
 });

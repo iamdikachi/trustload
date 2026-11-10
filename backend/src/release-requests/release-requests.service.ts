@@ -8,8 +8,10 @@ import {
 import {
   ApprovalDecision,
   LedgerEntryType,
+  Prisma,
   ReleaseRequestStatus,
 } from '@prisma/client';
+import { AiExtractionService } from '../ai/ai-extraction.service';
 import { PaypalService } from '../contributions/paypal.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateReleaseRequestDto } from './dto/create-release-request.dto';
@@ -62,6 +64,7 @@ export class ReleaseRequestsService {
     private readonly prisma: PrismaService,
     private readonly fxRatesService: FxRatesService,
     private readonly paypalService: PaypalService,
+    private readonly aiExtractionService: AiExtractionService,
   ) {}
 
   async createReleaseRequest(
@@ -131,6 +134,21 @@ export class ReleaseRequestsService {
         ? Number(rawAmount.toFixed(2))
         : this.fxRatesService.convertAmount(originalAmount, fxRate);
 
+    const fileBuffer =
+      file.buffer ??
+      (file.path ? await fs.promises.readFile(file.path) : Buffer.alloc(0));
+
+    const extraction = await this.aiExtractionService.extractInvoiceBuffer({
+      buffer: fileBuffer,
+      mimeType: file.mimetype || 'application/pdf',
+      originalName: file.originalname || path.basename(storedFilePath),
+      sourceFile: storedFilePath,
+      supplierHint: supplier,
+      currencyHint: currency,
+      amountHint: originalAmount,
+      languageHint: dto?.sourceLanguage,
+    });
+
     const extraFields: Record<string, unknown> = { supplier };
     const releaseRequest = await this.prisma.releaseRequest.create({
       data: {
@@ -141,8 +159,10 @@ export class ReleaseRequestsService {
         originalAmount: originalAmount.toFixed(2),
         fxRate: fxRate.toFixed(6),
         fxRateDate,
-        sourceLanguage: dto?.sourceLanguage?.trim() || null,
+        sourceLanguage:
+          dto?.sourceLanguage?.trim() || extraction.sourceLanguage || null,
         invoiceFile: storedFilePath,
+        aiReport: extraction as unknown as Prisma.InputJsonValue,
         status: PENDING_STATUS,
       },
       include: {
@@ -161,6 +181,61 @@ export class ReleaseRequestsService {
     return {
       ...releaseRequest,
       isPending: PENDING_RELEASE_STATUSES.has(releaseRequest.status),
+    };
+  }
+
+  async extractReleaseRequestInvoice(releaseRequestId: string) {
+    const releaseRequest = await this.prisma.releaseRequest.findUnique({
+      where: { id: releaseRequestId },
+      include: {
+        group: true,
+      },
+    });
+
+    if (!releaseRequest) {
+      throw new NotFoundException(
+        `Release request "${releaseRequestId}" not found.`,
+      );
+    }
+
+    const supplierHint =
+      ((releaseRequest as Record<string, unknown>).supplier as
+        | string
+        | undefined) ?? undefined;
+
+    const extraction = await this.aiExtractionService.extractFromStoredFile({
+      invoiceFilePath: releaseRequest.invoiceFile,
+      supplierHint,
+      currencyHint: releaseRequest.currency,
+      amountHint: Number(releaseRequest.originalAmount),
+      languageHint: releaseRequest.sourceLanguage,
+    });
+
+    const updated = await this.prisma.releaseRequest.update({
+      where: { id: releaseRequestId },
+      data: {
+        sourceLanguage: extraction.sourceLanguage,
+        aiReport: extraction as unknown as Prisma.InputJsonValue,
+      },
+      include: {
+        group: {
+          select: {
+            id: true,
+            name: true,
+            baseCurrency: true,
+            approvalThreshold: true,
+          },
+        },
+        approvals: true,
+      },
+    });
+
+    return {
+      extraction,
+      releaseRequest: {
+        ...updated,
+        isPending: PENDING_RELEASE_STATUSES.has(updated.status),
+      },
     };
   }
 
