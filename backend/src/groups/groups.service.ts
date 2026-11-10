@@ -6,6 +6,7 @@ import {
 import {
   ContributionStatus,
   GroupStatus,
+  LedgerEntryType,
   Prisma,
   ReleaseRequestStatus,
   SharedCostRule,
@@ -518,7 +519,11 @@ export class GroupsService {
       (sum, m) =>
         sum +
         m.contributions
-          .filter((c) => c.status === ContributionStatus.COMPLETED)
+          .filter(
+            (c) =>
+              c.status === ContributionStatus.COMPLETED ||
+              c.status === ContributionStatus.REFUNDED,
+          )
           .reduce((cSum, c) => cSum + Number(c.amount), 0),
       0,
     );
@@ -528,24 +533,55 @@ export class GroupsService {
       0,
     );
 
-    const totalReleased = group.releaseRequests
-      .filter((r) => r.status === ReleaseRequestStatus.RELEASED)
-      .reduce((sum, r) => sum + Number(r.amount), 0);
+    const totalReleased = group.ledgerEntries
+      .filter(
+        (e) =>
+          e.type === LedgerEntryType.STAGED_RELEASE ||
+          e.type === LedgerEntryType.RECEIPT_SPEND,
+      )
+      .reduce((sum, e) => sum + Math.abs(Number(e.amount)), 0);
+
+    const totalReversals = group.ledgerEntries
+      .filter((e) => e.type === LedgerEntryType.REVERSAL)
+      .reduce((sum, e) => sum + Math.abs(Number(e.amount)), 0);
+
+    const totalRefunded = group.ledgerEntries
+      .filter((e) => e.type === LedgerEntryType.REFUND)
+      .reduce((sum, e) => sum + Math.abs(Number(e.amount)), 0);
+
+    const netSpend = Number((totalReleased - totalReversals).toFixed(2));
+    const potBalance = Number(
+      (totalContributionsCompleted - netSpend - totalRefunded).toFixed(2),
+    );
+
+    const pendingStatuses = new Set<ReleaseRequestStatus>([
+      'PENDING' as ReleaseRequestStatus,
+      ReleaseRequestStatus.PENDING_VERIFICATION,
+      ReleaseRequestStatus.AWAITING_APPROVAL,
+    ]);
+
+    const pendingReleaseRequests = group.releaseRequests.filter((r) =>
+      pendingStatuses.has(r.status),
+    );
 
     return {
       ...group,
+      pendingReleaseRequests,
       summary: {
         memberCount: group.members.length,
         orderLineCount: group.orderLines.length,
+        pendingReleaseRequestCount: pendingReleaseRequests.length,
         totalExpectedContribution: Number(totalExpectedContribution.toFixed(2)),
         totalContributionsCompleted: Number(
           totalContributionsCompleted.toFixed(2),
         ),
         totalOrderBudget: Number(totalOrderBudget.toFixed(2)),
         totalReleased: Number(totalReleased.toFixed(2)),
-        potBalance: Number(
-          (totalContributionsCompleted - totalReleased).toFixed(2),
-        ),
+        totalReversals: Number(totalReversals.toFixed(2)),
+        netSpend,
+        totalRefunded: Number(totalRefunded.toFixed(2)),
+        potBalance,
+        isBalanced: Math.abs(potBalance) < 0.01,
       },
     };
   }

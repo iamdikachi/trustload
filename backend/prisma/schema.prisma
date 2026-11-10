@@ -33,6 +33,7 @@ enum ContributionStatus {
 }
 
 enum ReleaseRequestStatus {
+  PENDING
   PENDING_VERIFICATION
   AWAITING_APPROVAL
   APPROVED
@@ -146,6 +147,7 @@ model Contribution {
 model ReleaseRequest {
   id             String               @id @default(uuid())
   groupId        String               @map("group_id")
+  supplier       String?
   amount         Decimal              @db.Decimal(14, 2)
   currency       String               @default("USD")
   originalAmount Decimal              @db.Decimal(14, 2) @map("original_amount")
@@ -154,7 +156,7 @@ model ReleaseRequest {
   sourceLanguage String?              @map("source_language")
   invoiceFile    String               @map("invoice_file")
   aiReport       Json?                @map("ai_report")
-  status         ReleaseRequestStatus @default(PENDING_VERIFICATION)
+  status         ReleaseRequestStatus @default(PENDING)
   paypalPayoutId String?              @unique @map("paypal_payout_id")
   createdAt      DateTime             @default(now()) @map("created_at")
   updatedAt      DateTime             @updatedAt @map("updated_at")
