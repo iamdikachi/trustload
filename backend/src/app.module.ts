@@ -6,6 +6,7 @@ import { ContributionsModule } from './contributions/contributions.module';
 import { GroupsModule } from './groups/groups.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { ReleaseRequestsModule } from './release-requests/release-requests.module';
+import { SettlementModule } from './settlement/settlement.module';
 
 export const { ObserveModule, ObserveInstrument } = createObserveModule();
 
@@ -23,6 +24,7 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
     GroupsModule,
     ContributionsModule,
     ReleaseRequestsModule,
+    SettlementModule,
   ],
   controllers: [AppController],
   providers: [AppService],

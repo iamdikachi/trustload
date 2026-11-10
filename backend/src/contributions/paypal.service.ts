@@ -26,6 +26,13 @@ export interface PaypalPayoutResult {
   raw: Record<string, any>;
 }
 
+export interface PaypalRefundResult {
+  paypalRef: string;
+  status: string;
+  method: 'CAPTURE_REFUND' | 'PAYOUT';
+  raw: Record<string, any>;
+}
+
 export interface PaypalWebhookHeaders {
   'paypal-transmission-id'?: string;
   'paypal-transmission-time'?: string;
@@ -330,6 +337,76 @@ export class PaypalService {
     throw new BadGatewayException(
       `PayPal createPayout failed (${response.status}): ${errText}`,
     );
+  }
+
+  async refundVendor(params: {
+    memberId: string;
+    recipientEmail: string;
+    amount: string;
+    currency: string;
+    paypalCaptureId?: string | null;
+    note: string;
+  }): Promise<PaypalRefundResult> {
+    const token = await this.getAccessToken();
+
+    // 1. Attempt PayPal Captures Refund API (/v2/payments/captures/:captureId/refund) when captureId is present
+    if (
+      params.paypalCaptureId &&
+      !params.paypalCaptureId.startsWith('CAP-SBX-') &&
+      !params.paypalCaptureId.startsWith('PAYPAL-CAP-')
+    ) {
+      const refundResponse = await fetch(
+        `${this.baseUrl}/v2/payments/captures/${encodeURIComponent(params.paypalCaptureId)}/refund`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+            'PayPal-Request-Id': `trustload-refund-${params.memberId}-${Date.now()}`,
+          },
+          body: JSON.stringify({
+            amount: {
+              value: params.amount,
+              currency_code: params.currency,
+            },
+            note_to_payer: params.note.slice(0, 255),
+          }),
+        },
+      );
+
+      if (refundResponse.ok) {
+        const data = (await refundResponse.json()) as {
+          id?: string;
+          status?: string;
+        };
+        return {
+          paypalRef: data.id ?? `REFUND-${params.paypalCaptureId}`,
+          status: data.status ?? 'COMPLETED',
+          method: 'CAPTURE_REFUND',
+          raw: data as Record<string, any>,
+        };
+      }
+    }
+
+    // 2. Fallback to PayPal Payouts API (PRD Section 7: "Refund API against original contributions, or payouts back, depending on what the sandbox supports")
+    const payout = await this.createPayout({
+      releaseRequestId: params.memberId,
+      recipientEmail: params.recipientEmail,
+      amount: params.amount,
+      currency: params.currency,
+      note: params.note,
+    });
+
+    const refundRef = payout.payoutBatchId.startsWith('PAYOUT-BATCH-')
+      ? payout.payoutBatchId.replace('PAYOUT-BATCH-', 'PAYPAL-REFUND-')
+      : `PAYPAL-REFUND-${payout.payoutBatchId}`;
+
+    return {
+      paypalRef: refundRef,
+      status: payout.batchStatus,
+      method: 'PAYOUT',
+      raw: payout.raw,
+    };
   }
 
   /**

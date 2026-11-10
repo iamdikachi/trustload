@@ -384,17 +384,39 @@ export class ContributionsService {
       .reduce((sum, e) => sum + Number(e.amount), 0);
 
     const totalReleased = group.ledgerEntries
-      .filter((e) => e.type === LedgerEntryType.STAGED_RELEASE)
+      .filter(
+        (e) =>
+          e.type === LedgerEntryType.STAGED_RELEASE ||
+          e.type === LedgerEntryType.RECEIPT_SPEND,
+      )
       .reduce((sum, e) => sum + Math.abs(Number(e.amount)), 0);
+
+    const totalReversals = group.ledgerEntries
+      .filter((e) => e.type === LedgerEntryType.REVERSAL)
+      .reduce((sum, e) => sum + Math.abs(Number(e.amount)), 0);
+
+    const totalRefunded = group.ledgerEntries
+      .filter((e) => e.type === LedgerEntryType.REFUND)
+      .reduce((sum, e) => sum + Math.abs(Number(e.amount)), 0);
+
+    const netSpend = Number((totalReleased - totalReversals).toFixed(2));
+    const potBalance = Number(
+      (totalIn - netSpend - totalRefunded).toFixed(2),
+    );
 
     return {
       groupId: group.id,
       groupName: group.name,
+      status: group.status,
       baseCurrency: group.baseCurrency,
       summary: {
         totalIn: Number(totalIn.toFixed(2)),
         totalReleased: Number(totalReleased.toFixed(2)),
-        potBalance: Number((totalIn - totalReleased).toFixed(2)),
+        totalReversals: Number(totalReversals.toFixed(2)),
+        netSpend,
+        totalRefunded: Number(totalRefunded.toFixed(2)),
+        potBalance,
+        isBalanced: Math.abs(potBalance) < 0.01,
         entryCount: group.ledgerEntries.length,
       },
       ledgerEntries: group.ledgerEntries,

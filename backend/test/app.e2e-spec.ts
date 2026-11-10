@@ -471,4 +471,119 @@ describe('TrustLoad API (e2e)', () => {
       currency: 'CNY',
     });
   });
+
+  it('POST /groups/:groupId/settlement — calculates each vendor final amount owed or refunded, executes PayPal refunds, and closes the group with a balanced ledger (FR7)', async () => {
+    expect(createdGroupId).toBeDefined();
+    expect(memberIds.length).toBeGreaterThanOrEqual(2);
+
+    // 1. Fund Vendor 2 ($1200.00) so two vendors have funded the pot ($1000 + $1200 = $2200)
+    const order2Res = await request(app.getHttpServer())
+      .post(
+        `/groups/${createdGroupId}/members/${memberIds[1]}/contributions/orders`,
+      )
+      .send({})
+      .expect(201);
+
+    const paypalOrder2Id: string = order2Res.body.paypalOrder.id;
+    const eventId2 = `WH-SBX-V2-${Date.now()}`;
+    const transmissionId2 = `tx-v2-${Date.now()}`;
+    const transmissionTime2 = new Date().toISOString();
+    const validSig2 = paypalService.computeSandboxWebhookSignature({
+      transmissionId: transmissionId2,
+      transmissionTime: transmissionTime2,
+      eventId: eventId2,
+      paypalOrderId: paypalOrder2Id,
+    });
+
+    await request(app.getHttpServer())
+      .post('/webhooks/paypal')
+      .set('paypal-transmission-id', transmissionId2)
+      .set('paypal-transmission-time', transmissionTime2)
+      .set('paypal-transmission-sig', validSig2)
+      .set('paypal-auth-algo', 'SHA256withRSA')
+      .set(
+        'paypal-cert-url',
+        'https://api.sandbox.paypal.com/v1/notifications/certs/CERT-123',
+      )
+      .send({
+        id: eventId2,
+        event_type: 'PAYMENT.CAPTURE.COMPLETED',
+        create_time: transmissionTime2,
+        resource: {
+          id: `CAP-SBX-V2-${Date.now()}`,
+          status: 'COMPLETED',
+          amount: { currency_code: 'USD', value: '1200.00' },
+          supplementary_data: {
+            related_ids: { order_id: paypalOrder2Id },
+          },
+        },
+      })
+      .expect(200);
+
+    // 2. Execute final settlement:
+    // Vendor 1 ($1000 paid): goods = $600, proportional shared cost (40% of $150) = $60 -> total spend $660 -> refund due = $340
+    // Vendor 2 ($1200 paid): goods = $900, proportional shared cost (60% of $150) = $90 -> total spend $990 -> refund due = $210
+    const settleRes = await request(app.getHttpServer())
+      .post(`/groups/${createdGroupId}/settlement`)
+      .send({
+        totalSharedCosts: 150,
+        memberAllocations: [
+          { memberId: memberIds[0], goodsTotal: 600 },
+          { memberId: memberIds[1], goodsTotal: 900 },
+        ],
+      })
+      .expect(201);
+
+    expect(settleRes.body).toMatchObject({
+      groupId: createdGroupId,
+      status: 'CLOSED',
+      isBalanced: true,
+      potBalance: 0,
+      totals: {
+        totalContributed: 2200,
+        totalGoods: 1500,
+        totalSharedCosts: 150,
+        totalSpent: 1650,
+        totalRefundsDue: 550,
+        totalOwed: 0,
+      },
+    });
+
+    expect(settleRes.body.refundsExecuted).toHaveLength(2);
+    expect(settleRes.body.refundsExecuted[0]).toMatchObject({
+      memberId: memberIds[0],
+      amount: 340,
+      currency: 'USD',
+    });
+    expect(settleRes.body.refundsExecuted[0].paypalRef).toBeDefined();
+
+    expect(settleRes.body.refundsExecuted[1]).toMatchObject({
+      memberId: memberIds[1],
+      amount: 210,
+      currency: 'USD',
+    });
+    expect(settleRes.body.refundsExecuted[1].paypalRef).toBeDefined();
+
+    // 3. Verify the group ledger is balanced and contains the REFUND entries with PayPal references
+    const finalLedgerRes = await request(app.getHttpServer())
+      .get(`/groups/${createdGroupId}/ledger`)
+      .expect(200);
+
+    expect(finalLedgerRes.body).toMatchObject({
+      groupId: createdGroupId,
+      status: 'CLOSED',
+      summary: {
+        totalIn: 2200,
+        netSpend: 1650,
+        totalRefunded: 550,
+        potBalance: 0,
+        isBalanced: true,
+      },
+    });
+
+    const refundLedgerEntries = finalLedgerRes.body.ledgerEntries.filter(
+      (e: { type: string }) => e.type === 'REFUND',
+    );
+    expect(refundLedgerEntries).toHaveLength(2);
+  });
 });
