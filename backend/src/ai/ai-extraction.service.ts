@@ -5,6 +5,7 @@ import {
   Injectable,
   Logger,
 } from '@nestjs/common';
+import { FxRatesService } from '../release-requests/fx-rates.service';
 import type { UploadedInvoiceFile } from '../release-requests/release-requests.service';
 import {
   ExtractedLineItem,
@@ -91,6 +92,8 @@ const GEMINI_RESPONSE_SCHEMA = {
 export class AiExtractionService {
   private readonly logger = new Logger(AiExtractionService.name);
 
+  constructor(private readonly fxRatesService: FxRatesService) {}
+
   private get geminiApiKey(): string {
     return process.env.GEMINI_API_KEY ?? '';
   }
@@ -129,6 +132,7 @@ export class AiExtractionService {
       sourceFile: storedAuditPath,
       languageHint: dto?.languageHint,
       qualityHint: dto?.qualityHint,
+      baseCurrency: dto?.baseCurrency,
     });
   }
 
@@ -138,6 +142,7 @@ export class AiExtractionService {
     currencyHint?: string | null;
     amountHint?: number | null;
     languageHint?: string | null;
+    baseCurrency?: string | null;
   }): Promise<InvoiceExtractionResult> {
     const absPath = path.isAbsolute(params.invoiceFilePath)
       ? params.invoiceFilePath
@@ -168,6 +173,7 @@ export class AiExtractionService {
       currencyHint: params.currencyHint ?? undefined,
       amountHint: params.amountHint ?? undefined,
       languageHint: params.languageHint ?? undefined,
+      baseCurrency: params.baseCurrency ?? undefined,
     });
   }
 
@@ -181,6 +187,7 @@ export class AiExtractionService {
     amountHint?: number;
     languageHint?: string;
     qualityHint?: string;
+    baseCurrency?: string;
   }): Promise<InvoiceExtractionResult> {
     let rawExtraction: Record<string, any> | null = null;
     let modelUsed = this.modelName;
@@ -210,6 +217,7 @@ export class AiExtractionService {
       rawExtraction,
       params.sourceFile,
       modelUsed,
+      params.baseCurrency,
     );
 
     return normalized;
@@ -621,6 +629,7 @@ export class AiExtractionService {
     raw: Record<string, any>,
     sourceFile: string,
     modelUsed: string,
+    targetBaseCurrency?: string,
   ): InvoiceExtractionResult {
     const supplier =
       typeof raw?.supplier === 'string' && raw.supplier.trim()
@@ -782,6 +791,12 @@ export class AiExtractionService {
       ).toFixed(2),
     );
 
+    const fxConversion = this.fxRatesService.convertInvoiceTotalToBase({
+      originalAmount: grandTotal,
+      fromCurrency: currency,
+      toBaseCurrency: targetBaseCurrency ?? 'USD',
+    });
+
     return {
       supplier,
       date,
@@ -791,6 +806,12 @@ export class AiExtractionService {
       isBlurryOrNoisy,
       lineItems,
       grandTotal,
+      baseCurrency: fxConversion.baseCurrency,
+      fxRate: fxConversion.fxRate,
+      rateUsed: fxConversion.rateUsed,
+      fxRateDate: fxConversion.rateDate,
+      convertedBaseAmount: fxConversion.convertedBaseAmount,
+      convertedInCode: true,
       confidencePerField,
       fieldConfidence: confidencePerField,
       overallConfidence,

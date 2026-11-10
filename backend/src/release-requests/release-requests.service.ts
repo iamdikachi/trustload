@@ -150,6 +150,7 @@ export class ReleaseRequestsService {
       currencyHint: currency,
       amountHint: originalAmount,
       languageHint: dto?.sourceLanguage,
+      baseCurrency: group.baseCurrency,
     });
 
     const verification =
@@ -203,8 +204,27 @@ export class ReleaseRequestsService {
 
     return {
       ...releaseRequest,
+      originalCurrency: releaseRequest.currency,
+      baseCurrency: group.baseCurrency,
+      rateUsed: Number(releaseRequest.fxRate),
+      rateDate: releaseRequest.fxRateDate.toISOString(),
+      convertedBaseAmount: Number(releaseRequest.amount),
+      convertedInCode: true,
       isPending: PENDING_RELEASE_STATUSES.has(releaseRequest.status),
     };
+  }
+
+  getRateTable(baseCurrency?: string) {
+    return this.fxRatesService.getRateTable(baseCurrency);
+  }
+
+  convertCurrencyInCode(params: {
+    originalAmount: number;
+    fromCurrency: string;
+    toBaseCurrency?: string;
+    customRate?: number | string;
+  }) {
+    return this.fxRatesService.convertInvoiceTotalToBase(params);
   }
 
   async extractReleaseRequestInvoice(releaseRequestId: string) {
@@ -632,7 +652,17 @@ export class ReleaseRequestsService {
             ...updatedRelease,
             isPending: false,
           },
-          ledgerEntry,
+          ledgerEntry: {
+            ...ledgerEntry,
+            originalCurrency: ledgerEntry.currency,
+            baseCurrency: releaseRequest.group.baseCurrency,
+            rateUsed: Number(ledgerEntry.fxRate),
+            rateDate: ledgerEntry.fxRateDate.toISOString(),
+            convertedBaseAmount: Number(
+              Math.abs(Number(ledgerEntry.amount)).toFixed(2),
+            ),
+            convertedInCode: true,
+          },
           paypalPayoutId: payoutResult.payoutBatchId,
         };
       },

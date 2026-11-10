@@ -20,6 +20,13 @@ export class ExtractInvoiceDto {
     description: 'Optional image quality hint (e.g. clean, blurry, handwritten)',
   })
   qualityHint?: string;
+
+  @ApiPropertyOptional({
+    example: 'USD',
+    description:
+      'Target base currency for deterministic code-level FX conversion (defaults to USD)',
+  })
+  baseCurrency?: string;
 }
 
 export interface FieldConfidenceMap {
@@ -61,6 +68,12 @@ export interface InvoiceExtractionResult {
   isBlurryOrNoisy: boolean;
   lineItems: ExtractedLineItem[];
   grandTotal: number;
+  baseCurrency: string;
+  fxRate: number;
+  rateUsed: number;
+  fxRateDate: string;
+  convertedBaseAmount: number;
+  convertedInCode: true;
   confidencePerField: FieldConfidenceMap;
   fieldConfidence: FieldConfidenceMap;
   overallConfidence: number;

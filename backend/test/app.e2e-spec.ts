@@ -909,4 +909,185 @@ describe('TrustLoad API (e2e)', () => {
     expect(spikeAndUnorderedCodes).toContain('PRICE_SPIKE_ABOVE_EARLIER_PRICE');
     expect(spikeAndUnorderedCodes).toContain('UNORDERED_ITEM');
   });
+
+  it('GET /fx-rates, POST /fx-rates/convert, & GET /groups/:groupId/ledger — converts every invoice total in code using the fixed exchange rate table with stored date, and shows both a Yuan (CNY) invoice and a Dirham (AED) invoice with original amount, rate used, and converted base-currency amount in the ledger', async () => {
+    expect(createdGroupId).toBeDefined();
+    expect(memberIds.length).toBeGreaterThanOrEqual(3);
+
+    // 1. Inspect fixed exchange rate table (GET /fx-rates)
+    const rateTableRes = await request(app.getHttpServer())
+      .get('/fx-rates?baseCurrency=USD')
+      .expect(200);
+
+    expect(rateTableRes.body).toMatchObject({
+      baseCurrency: 'USD',
+      fxRateDate: '2026-11-08T00:00:00.000Z',
+      source: 'FIXED_RATE_TABLE',
+      convertedInCode: true,
+    });
+
+    const cnyRateEntry = rateTableRes.body.rates.find(
+      (r: { currency: string }) => r.currency === 'CNY',
+    );
+    const aedRateEntry = rateTableRes.body.rates.find(
+      (r: { currency: string }) => r.currency === 'AED',
+    );
+    expect(cnyRateEntry).toMatchObject({
+      currency: 'CNY',
+      fxRate: 0.138889,
+      rateUsed: 0.138889,
+      fxRateDate: '2026-11-08T00:00:00.000Z',
+    });
+    expect(aedRateEntry).toMatchObject({
+      currency: 'AED',
+      fxRate: 0.272294,
+      rateUsed: 0.272294,
+      fxRateDate: '2026-11-08T00:00:00.000Z',
+    });
+
+    // 2. Test deterministic code-level conversion endpoint (POST /fx-rates/convert) for both CNY and AED
+    const cnyConvertRes = await request(app.getHttpServer())
+      .post('/fx-rates/convert')
+      .send({
+        originalAmount: 7200,
+        fromCurrency: 'CNY',
+        toBaseCurrency: 'USD',
+      })
+      .expect(201);
+
+    expect(cnyConvertRes.body).toMatchObject({
+      originalAmount: 7200,
+      originalCurrency: 'CNY',
+      baseCurrency: 'USD',
+      fxRate: 0.138889,
+      rateUsed: 0.138889,
+      rateDate: '2026-11-08T00:00:00.000Z',
+      convertedBaseAmount: 1000,
+      convertedInCode: true,
+    });
+
+    const aedConvertRes = await request(app.getHttpServer())
+      .post('/fx-rates/convert')
+      .send({
+        originalAmount: 3672.5,
+        fromCurrency: 'AED',
+        toBaseCurrency: 'USD',
+      })
+      .expect(201);
+
+    expect(aedConvertRes.body).toMatchObject({
+      originalAmount: 3672.5,
+      originalCurrency: 'AED',
+      baseCurrency: 'USD',
+      fxRate: 0.272294,
+      rateUsed: 0.272294,
+      rateDate: '2026-11-08T00:00:00.000Z',
+      convertedBaseAmount: 1000,
+      convertedInCode: true,
+    });
+
+    // 3. Submit a UAE Dirham (AED) release request (3672.50 AED -> 1000.00 USD at stored rate 0.272294)
+    const dirhamPdfBuffer = Buffer.from(
+      [
+        '%PDF-1.4',
+        'Supplier: Al Ras Royal Leather & Textiles LLC (Deira, Dubai)',
+        'Date: 2026-03-19',
+        'Currency: AED',
+        'Item: حقيبة يد جلدية Leather Crossbody Handbag | Qty: 50 | UnitPrice: 73.45 | Total: 3672.50',
+        'GrandTotal: 3672.50',
+      ].join('\n'),
+      'utf-8',
+    );
+
+    const aedReleaseRes = await request(app.getHttpServer())
+      .post(`/groups/${createdGroupId}/release-requests`)
+      .field('amount', '3672.50')
+      .field('supplier', 'Al Ras Royal Leather & Textiles LLC (Deira, Dubai)')
+      .field('currency', 'AED')
+      .field('sourceLanguage', 'ar-AE')
+      .attach('invoice', dirhamPdfBuffer, {
+        filename: 'dubai-deira-dirham-invoice.pdf',
+        contentType: 'application/pdf',
+      })
+      .expect(201);
+
+    if (aedReleaseRes.body.invoiceFile) {
+      createdAuditPaths.push(aedReleaseRes.body.invoiceFile);
+    }
+
+    const aedReleaseId: string = aedReleaseRes.body.id;
+    expect(aedReleaseRes.body).toMatchObject({
+      id: aedReleaseId,
+      groupId: createdGroupId,
+      currency: 'AED',
+      originalCurrency: 'AED',
+      originalAmount: '3672.5',
+      fxRate: '0.272294',
+      rateUsed: 0.272294,
+      rateDate: '2026-11-08T00:00:00.000Z',
+      amount: '1000',
+      convertedBaseAmount: 1000,
+      baseCurrency: 'USD',
+      convertedInCode: true,
+    });
+
+    // 4. Approve the Dirham (AED) release request across the 3-member threshold so it writes to the group ledger
+    for (let i = 0; i < 3; i++) {
+      await request(app.getHttpServer())
+        .post(`/release-requests/${aedReleaseId}/approvals`)
+        .send({
+          memberId: memberIds[i],
+          decision: 'APPROVED',
+          comment: `Approved Dirham invoice by Vendor ${i + 1}`,
+        })
+        .expect(201);
+    }
+
+    // 5. Fetch the group ledger and verify BOTH the Yuan (CNY) invoice and Dirham (AED) invoice show:
+    //    - originalAmount
+    //    - rateUsed / fxRate (and rateDate / fxRateDate)
+    //    - convertedBaseAmount / amount in baseCurrency (USD)
+    const ledgerRes = await request(app.getHttpServer())
+      .get(`/groups/${createdGroupId}/ledger`)
+      .expect(200);
+
+    const yuanLedgerEntry = ledgerRes.body.ledgerEntries.find(
+      (e: { type: string; currency: string }) =>
+        e.type === 'STAGED_RELEASE' && e.currency === 'CNY',
+    );
+    const dirhamLedgerEntry = ledgerRes.body.ledgerEntries.find(
+      (e: { type: string; currency: string }) =>
+        e.type === 'STAGED_RELEASE' && e.currency === 'AED',
+    );
+
+    expect(yuanLedgerEntry).toBeDefined();
+    expect(yuanLedgerEntry).toMatchObject({
+      type: 'STAGED_RELEASE',
+      currency: 'CNY',
+      originalCurrency: 'CNY',
+      originalAmount: '7200',
+      fxRate: '0.138889',
+      rateUsed: 0.138889,
+      rateDate: '2026-11-08T00:00:00.000Z',
+      amount: '-1000',
+      convertedBaseAmount: 1000,
+      baseCurrency: 'USD',
+      convertedInCode: true,
+    });
+
+    expect(dirhamLedgerEntry).toBeDefined();
+    expect(dirhamLedgerEntry).toMatchObject({
+      type: 'STAGED_RELEASE',
+      currency: 'AED',
+      originalCurrency: 'AED',
+      originalAmount: '3672.5',
+      fxRate: '0.272294',
+      rateUsed: 0.272294,
+      rateDate: '2026-11-08T00:00:00.000Z',
+      amount: '-1000',
+      convertedBaseAmount: 1000,
+      baseCurrency: 'USD',
+      convertedInCode: true,
+    });
+  });
 });

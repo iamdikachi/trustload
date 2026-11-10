@@ -5,6 +5,7 @@ import {
   Get,
   Param,
   Post,
+  Query,
   Res,
   UploadedFiles,
   UseInterceptors,
@@ -14,12 +15,16 @@ import {
   ApiConsumes,
   ApiOperation,
   ApiParam,
+  ApiQuery,
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { VerifyInvoiceDto } from '../ai/dto/verify-invoice.dto';
-import { CreateReleaseRequestDto } from './dto/create-release-request.dto';
+import {
+  ConvertFxRateDto,
+  CreateReleaseRequestDto,
+} from './dto/create-release-request.dto';
 import { SubmitApprovalDto } from './dto/submit-approval.dto';
 import {
   ReleaseRequestsService,
@@ -191,5 +196,34 @@ export class ReleaseRequestsController {
   @ApiParam({ name: 'id', description: 'Release Request UUID' })
   async triggerPayout(@Param('id') id: string) {
     return this.releaseRequestsService.triggerPayout(id);
+  }
+
+  @Get('fx-rates')
+  @ApiOperation({
+    summary:
+      'Get the fixed demo exchange rate table and stored rate date used for deterministic code-level conversions',
+  })
+  @ApiQuery({
+    name: 'baseCurrency',
+    required: false,
+    example: 'USD',
+    description: 'Group base currency (defaults to USD)',
+  })
+  getFxRateTable(@Query('baseCurrency') baseCurrency?: string) {
+    return this.releaseRequestsService.getRateTable(baseCurrency);
+  }
+
+  @Post('fx-rates/convert')
+  @ApiOperation({
+    summary:
+      'Convert an invoice amount from its original currency to a group base currency in code using the stored rate table and date',
+  })
+  convertFxRate(@Body() dto: ConvertFxRateDto) {
+    return this.releaseRequestsService.convertCurrencyInCode({
+      originalAmount: Number(dto.originalAmount),
+      fromCurrency: dto.fromCurrency,
+      toBaseCurrency: dto.toBaseCurrency,
+      customRate: dto.customRate,
+    });
   }
 }

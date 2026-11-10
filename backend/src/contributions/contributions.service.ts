@@ -404,6 +404,19 @@ export class ContributionsService {
       (totalIn - netSpend - totalRefunded).toFixed(2),
     );
 
+    const enrichedLedgerEntries = group.ledgerEntries.map((entry) => ({
+      ...entry,
+      originalCurrency: entry.currency,
+      baseCurrency: group.baseCurrency,
+      rateUsed: Number(entry.fxRate),
+      rateDate:
+        entry.fxRateDate instanceof Date
+          ? entry.fxRateDate.toISOString()
+          : String(entry.fxRateDate),
+      convertedBaseAmount: Number(Math.abs(Number(entry.amount)).toFixed(2)),
+      convertedInCode: true,
+    }));
+
     return {
       groupId: group.id,
       groupName: group.name,
@@ -417,9 +430,9 @@ export class ContributionsService {
         totalRefunded: Number(totalRefunded.toFixed(2)),
         potBalance,
         isBalanced: Math.abs(potBalance) < 0.01,
-        entryCount: group.ledgerEntries.length,
+        entryCount: enrichedLedgerEntries.length,
       },
-      ledgerEntries: group.ledgerEntries,
+      ledgerEntries: enrichedLedgerEntries,
     };
   }
 }
