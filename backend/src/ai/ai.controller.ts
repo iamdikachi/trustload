@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Param,
   Post,
   UploadedFiles,
   UseInterceptors,
@@ -9,19 +10,25 @@ import { AnyFilesInterceptor } from '@nestjs/platform-express';
 import {
   ApiConsumes,
   ApiOperation,
+  ApiParam,
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
 import type { UploadedInvoiceFile } from '../release-requests/release-requests.service';
 import { AiExtractionService } from './ai-extraction.service';
+import { AiVerificationService } from './ai-verification.service';
 import { ExtractInvoiceDto } from './dto/extract-invoice.dto';
+import { VerifyInvoiceDto } from './dto/verify-invoice.dto';
 
-@ApiTags('AI Invoice & Receipt Extraction (FR4)')
-@Controller('ai')
+@ApiTags('AI Invoice Extraction & Verification (FR4)')
+@Controller()
 export class AiController {
-  constructor(private readonly aiExtractionService: AiExtractionService) {}
+  constructor(
+    private readonly aiExtractionService: AiExtractionService,
+    private readonly aiVerificationService: AiVerificationService,
+  ) {}
 
-  @Post('invoices/extract')
+  @Post('ai/invoices/extract')
   @UseInterceptors(
     AnyFilesInterceptor({
       limits: { fileSize: 15 * 1024 * 1024 },
@@ -44,7 +51,7 @@ export class AiController {
     return this.aiExtractionService.extractFromUploadedFile(files?.[0], dto);
   }
 
-  @Post('extract-invoice')
+  @Post('ai/extract-invoice')
   @UseInterceptors(
     AnyFilesInterceptor({
       limits: { fileSize: 15 * 1024 * 1024 },
@@ -60,5 +67,54 @@ export class AiController {
   ) {
     return this.aiExtractionService.extractFromUploadedFile(files?.[0], dto);
   }
-}
 
+  @Post('ai/invoices/verify')
+  @UseInterceptors(
+    AnyFilesInterceptor({
+      limits: { fileSize: 15 * 1024 * 1024 },
+    }),
+  )
+  @ApiOperation({
+    summary:
+      'Verify an extracted invoice (or uploaded invoice file) against the group combined order and historical prices (FR4)',
+  })
+  @ApiResponse({
+    status: 201,
+    description:
+      'Match report with checks (itemsMatch, quantitiesWithinOrder, lineTotalsAddUp, invoiceTotalWithinRequestedAmount, pricesReasonable), lineItemMatches, and flags.',
+  })
+  async verifyInvoice(
+    @Body() dto: VerifyInvoiceDto,
+    @UploadedFiles() files?: UploadedInvoiceFile[],
+  ) {
+    return this.aiVerificationService.verifyInvoice(
+      undefined,
+      dto,
+      files?.[0],
+    );
+  }
+
+  @Post('groups/:groupId/invoices/verify')
+  @UseInterceptors(
+    AnyFilesInterceptor({
+      limits: { fileSize: 15 * 1024 * 1024 },
+    }),
+  )
+  @ApiParam({ name: 'groupId', description: 'Group UUID' })
+  @ApiOperation({
+    summary:
+      'Verify an invoice file or extracted JSON payload against a specific group combined order (FR4)',
+  })
+  @ApiResponse({
+    status: 201,
+    description:
+      'Match report comparing invoice items, quantities, line totals, grand total, and unit prices against the group order.',
+  })
+  async verifyGroupInvoice(
+    @Param('groupId') groupId: string,
+    @Body() dto: VerifyInvoiceDto,
+    @UploadedFiles() files?: UploadedInvoiceFile[],
+  ) {
+    return this.aiVerificationService.verifyInvoice(groupId, dto, files?.[0]);
+  }
+}

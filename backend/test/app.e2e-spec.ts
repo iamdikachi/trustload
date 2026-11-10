@@ -730,4 +730,183 @@ describe('TrustLoad API (e2e)', () => {
       lineTotal: 5750,
     });
   });
+
+  it('POST /groups/:groupId/invoices/verify & POST /release-requests/:id/verify — compares extracted invoices against the group combined order and flags deliberately wrong invoices (inflated quantity, wrong total, unordered item, or price spike) with clear reasons (FR4)', async () => {
+    expect(createdGroupId).toBeDefined();
+    expect(createdReleaseRequestId).toBeDefined();
+
+    // 1. Verify the clean Release Request #1 against the group's combined order
+    const validVerifyRes = await request(app.getHttpServer())
+      .post(`/release-requests/${createdReleaseRequestId}/verify`)
+      .send({})
+      .expect(201);
+
+    expect(validVerifyRes.body).toMatchObject({
+      groupId: createdGroupId,
+      releaseRequestId: createdReleaseRequestId,
+      passedAllChecks: true,
+      status: 'VERIFIED',
+      flagCount: 0,
+      checks: {
+        itemsMatch: { passed: true, matchedCount: 2, unmatchedCount: 0 },
+        quantitiesWithinOrder: { passed: true },
+        lineTotalsAddUp: {
+          passed: true,
+          computedLineSum: 7200,
+          statedGrandTotal: 7200,
+          discrepancy: 0,
+        },
+        invoiceTotalWithinRequestedAmount: {
+          passed: true,
+          invoiceOriginalTotal: 7200,
+          requestedOriginalAmount: 7200,
+        },
+        pricesReasonable: { passed: true },
+      },
+    });
+    expect(validVerifyRes.body.flags).toEqual([]);
+
+    // 2. Deliberately Wrong Invoice #1: Inflated Quantity (65 Power Banks billed vs 40 ordered)
+    const inflatedQtyInvoiceBuffer = Buffer.from(
+      [
+        '%PDF-1.4',
+        'Supplier: Shenzhen Golden Dragon Electronics Co.',
+        'Date: 2026-03-18',
+        'Currency: CNY',
+        'Item: 20000mAh Type-C 笔记本移动电源 | Qty: 65 | UnitPrice: 108.00 | Total: 7020.00',
+        'GrandTotal: 7020.00',
+      ].join('\n'),
+      'utf-8',
+    );
+
+    const inflatedQtyRes = await request(app.getHttpServer())
+      .post(`/groups/${createdGroupId}/invoices/verify`)
+      .field('requestedAmount', '7020')
+      .field('requestedAmountCurrency', 'CNY')
+      .attach('invoice', inflatedQtyInvoiceBuffer, {
+        filename: 'deliberately-inflated-quantity-invoice.pdf',
+        contentType: 'application/pdf',
+      })
+      .expect(201);
+
+    if (inflatedQtyRes.body.extraction?.sourceFile) {
+      createdAuditPaths.push(inflatedQtyRes.body.extraction.sourceFile);
+    }
+
+    expect(inflatedQtyRes.body).toMatchObject({
+      groupId: createdGroupId,
+      passedAllChecks: false,
+      status: 'FLAGGED',
+      checks: {
+        itemsMatch: { passed: true, matchedCount: 1, unmatchedCount: 0 },
+        quantitiesWithinOrder: { passed: false },
+        lineTotalsAddUp: { passed: true },
+      },
+    });
+
+    const qtyFlag = inflatedQtyRes.body.flags.find(
+      (f: { code: string }) => f.code === 'QUANTITY_EXCEEDS_ORDER',
+    );
+    expect(qtyFlag).toBeDefined();
+    expect(qtyFlag).toMatchObject({
+      code: 'QUANTITY_EXCEEDS_ORDER',
+      severity: 'HIGH',
+      check: 'quantitiesWithinOrder',
+      item: 'Type-C Laptop Power Bank 20000mAh',
+      expected: 40,
+      actual: 65,
+    });
+    expect(qtyFlag.reason).toContain('65');
+    expect(qtyFlag.reason).toContain('40');
+
+    // 3. Deliberately Wrong Invoice #2: Wrong Grand Total & Line Total Arithmetic Mismatch + Exceeds Requested Amount
+    const wrongTotalsRes = await request(app.getHttpServer())
+      .post(`/groups/${createdGroupId}/invoices/verify`)
+      .send({
+        supplier: 'Istanbul Grand Bazaar Textiles',
+        currency: 'TRY',
+        grandTotal: 52000, // Deliberately wrong grand total (line states 41400)
+        requestedAmount: 40800, // Exceeds traveler's requested release amount of 40800 TRY
+        requestedAmountCurrency: 'TRY',
+        lineItems: [
+          {
+            description: 'Turkish Cotton Towel Bale',
+            quantity: 30,
+            unitPrice: 1360,
+            total: 41400, // Deliberately wrong line total (30 * 1360 = 40800, not 41400)
+          },
+        ],
+      })
+      .expect(201);
+
+    expect(wrongTotalsRes.body).toMatchObject({
+      groupId: createdGroupId,
+      passedAllChecks: false,
+      status: 'FLAGGED',
+      checks: {
+        itemsMatch: { passed: true },
+        quantitiesWithinOrder: { passed: true },
+        lineTotalsAddUp: {
+          passed: false,
+          computedLineSum: 41400,
+          statedGrandTotal: 52000,
+          discrepancy: 10600,
+        },
+        invoiceTotalWithinRequestedAmount: {
+          passed: false,
+          invoiceOriginalTotal: 52000,
+          requestedOriginalAmount: 40800,
+        },
+      },
+    });
+
+    const flagCodes = wrongTotalsRes.body.flags.map(
+      (f: { code: string }) => f.code,
+    );
+    expect(flagCodes).toContain('LINE_TOTAL_ARITHMETIC_MISMATCH');
+    expect(flagCodes).toContain('GRAND_TOTAL_MISMATCH');
+    expect(flagCodes).toContain('INVOICE_TOTAL_EXCEEDS_REQUESTED_AMOUNT');
+
+    // 4. Deliberately Wrong Invoice #3: Price Far Above Earlier Price & Unordered Item
+    const priceSpikeAndUnorderedRes = await request(app.getHttpServer())
+      .post(`/groups/${createdGroupId}/invoices/verify`)
+      .send({
+        supplier: 'Guangzhou Electronics Market',
+        currency: 'CNY',
+        grandTotal: 4200,
+        lineItems: [
+          {
+            // Earlier invoice in this group was 144 CNY ($20 USD) per unit; 220 CNY ($30.56 USD) is +52.8% higher
+            description: 'GaN 100W Desktop Charger',
+            quantity: 10,
+            unitPrice: 220,
+            total: 2200,
+          },
+          {
+            // Item not in the group's combined order
+            description: 'Luxury Automatic Wristwatch',
+            quantity: 2,
+            unitPrice: 1000,
+            total: 2000,
+          },
+        ],
+      })
+      .expect(201);
+
+    expect(priceSpikeAndUnorderedRes.body).toMatchObject({
+      groupId: createdGroupId,
+      passedAllChecks: false,
+      status: 'FLAGGED',
+      checks: {
+        itemsMatch: { passed: false, matchedCount: 1, unmatchedCount: 1 },
+        pricesReasonable: { passed: false },
+      },
+    });
+
+    const spikeAndUnorderedCodes = priceSpikeAndUnorderedRes.body.flags.map(
+      (f: { code: string }) => f.code,
+    );
+    expect(spikeAndUnorderedCodes).toContain('PRICE_SPIKE_ABOVE_EARLIER_PRICE');
+    expect(spikeAndUnorderedCodes).toContain('UNORDERED_ITEM');
+  });
 });

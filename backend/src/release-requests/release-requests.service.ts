@@ -12,6 +12,8 @@ import {
   ReleaseRequestStatus,
 } from '@prisma/client';
 import { AiExtractionService } from '../ai/ai-extraction.service';
+import { AiVerificationService } from '../ai/ai-verification.service';
+import type { VerifyInvoiceDto } from '../ai/dto/verify-invoice.dto';
 import { PaypalService } from '../contributions/paypal.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateReleaseRequestDto } from './dto/create-release-request.dto';
@@ -65,6 +67,7 @@ export class ReleaseRequestsService {
     private readonly fxRatesService: FxRatesService,
     private readonly paypalService: PaypalService,
     private readonly aiExtractionService: AiExtractionService,
+    private readonly aiVerificationService: AiVerificationService,
   ) {}
 
   async createReleaseRequest(
@@ -149,6 +152,26 @@ export class ReleaseRequestsService {
       languageHint: dto?.sourceLanguage,
     });
 
+    const verification =
+      await this.aiVerificationService.verifyExtractionAgainstGroupOrder({
+        groupId: group.id,
+        extraction,
+        requestedAmount: originalAmount,
+        requestedAmountCurrency: currency,
+        explicitFxRate: fxRate,
+      });
+
+    const mergedAiReport = {
+      ...extraction,
+      passedAllChecks: verification.passedAllChecks,
+      verificationStatus: verification.status,
+      flags: verification.flags,
+      checks: verification.checks,
+      lineItemMatches: verification.lineItemMatches,
+      verificationSummary: verification.summary,
+      verification,
+    };
+
     const extraFields: Record<string, unknown> = { supplier };
     const releaseRequest = await this.prisma.releaseRequest.create({
       data: {
@@ -162,7 +185,7 @@ export class ReleaseRequestsService {
         sourceLanguage:
           dto?.sourceLanguage?.trim() || extraction.sourceLanguage || null,
         invoiceFile: storedFilePath,
-        aiReport: extraction as unknown as Prisma.InputJsonValue,
+        aiReport: mergedAiReport as unknown as Prisma.InputJsonValue,
         status: PENDING_STATUS,
       },
       include: {
@@ -211,11 +234,32 @@ export class ReleaseRequestsService {
       languageHint: releaseRequest.sourceLanguage,
     });
 
+    const verification =
+      await this.aiVerificationService.verifyExtractionAgainstGroupOrder({
+        groupId: releaseRequest.groupId,
+        releaseRequestId: releaseRequest.id,
+        extraction,
+        requestedAmount: Number(releaseRequest.originalAmount),
+        requestedAmountCurrency: releaseRequest.currency,
+        explicitFxRate: Number(releaseRequest.fxRate),
+      });
+
+    const mergedAiReport = {
+      ...extraction,
+      passedAllChecks: verification.passedAllChecks,
+      verificationStatus: verification.status,
+      flags: verification.flags,
+      checks: verification.checks,
+      lineItemMatches: verification.lineItemMatches,
+      verificationSummary: verification.summary,
+      verification,
+    };
+
     const updated = await this.prisma.releaseRequest.update({
       where: { id: releaseRequestId },
       data: {
         sourceLanguage: extraction.sourceLanguage,
-        aiReport: extraction as unknown as Prisma.InputJsonValue,
+        aiReport: mergedAiReport as unknown as Prisma.InputJsonValue,
       },
       include: {
         group: {
@@ -232,11 +276,22 @@ export class ReleaseRequestsService {
 
     return {
       extraction,
+      verification,
       releaseRequest: {
         ...updated,
         isPending: PENDING_RELEASE_STATUSES.has(updated.status),
       },
     };
+  }
+
+  async verifyReleaseRequestInvoice(
+    releaseRequestId: string,
+    dto?: VerifyInvoiceDto,
+  ) {
+    return this.aiVerificationService.verifyInvoice(undefined, {
+      ...dto,
+      releaseRequestId,
+    });
   }
 
   async submitApproval(releaseRequestId: string, dto: SubmitApprovalDto) {

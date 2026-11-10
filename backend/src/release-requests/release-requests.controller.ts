@@ -18,6 +18,7 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import type { Response } from 'express';
+import { VerifyInvoiceDto } from '../ai/dto/verify-invoice.dto';
 import { CreateReleaseRequestDto } from './dto/create-release-request.dto';
 import { SubmitApprovalDto } from './dto/submit-approval.dto';
 import {
@@ -126,6 +127,19 @@ export class ReleaseRequestsController {
   @ApiParam({ name: 'id', description: 'Release Request UUID' })
   async extractReleaseInvoice(@Param('id') id: string) {
     return this.releaseRequestsService.extractReleaseRequestInvoice(id);
+  }
+
+  @Post('release-requests/:id/verify')
+  @ApiOperation({
+    summary:
+      'Verify a release request invoice against the group combined order and historical prices, updating aiReport with flags (FR4)',
+  })
+  @ApiParam({ name: 'id', description: 'Release Request UUID' })
+  async verifyReleaseInvoice(
+    @Param('id') id: string,
+    @Body() dto?: VerifyInvoiceDto,
+  ) {
+    return this.releaseRequestsService.verifyReleaseRequestInvoice(id, dto);
   }
 
   @Post('release-requests/:id/approvals')
