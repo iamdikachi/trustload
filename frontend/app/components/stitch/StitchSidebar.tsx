@@ -116,13 +116,17 @@ export function StitchSidebar({
           <div className="h-16 px-5 border-b border-[#e6deff] flex items-center justify-between">
             <div
               className="flex items-center gap-2.5 cursor-pointer group"
-              onClick={() => handleItemClick('dashboard')}
+              onClick={() => {
+                onGoToLanding();
+                if (onCloseMobile) onCloseMobile();
+              }}
+              title="Return to homepage"
             >
-              <div className="w-9 h-9 rounded-lg bg-[#5b3fd1] flex items-center justify-center text-white shadow-sm transition-transform group-hover:scale-105">
-                <span className="material-symbols-outlined text-[20px]">account_balance_wallet</span>
+              <div className="w-9 h-9 rounded-lg bg-[#431fb9] flex items-center justify-center text-white shadow-sm transition-transform group-hover:scale-105">
+                <span className="material-symbols-outlined text-[20px]">shield</span>
               </div>
               <div className="flex items-baseline gap-1.5">
-                <span className="font-headline-sm text-[20px] font-black tracking-tight text-[#1d1833]">
+                <span className="font-headline-sm text-[20px] font-black tracking-tight text-[#1d1833] group-hover:text-[#431fb9] transition-colors">
                   TrustLoad
                 </span>
                 <span className="font-label-sm text-[10px] px-2 py-0.5 rounded-full bg-[#f2ebff] text-[#431fb9] uppercase font-bold tracking-wider">

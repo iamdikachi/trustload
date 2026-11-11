@@ -95,21 +95,6 @@ export default function Home() {
 
       {/* Main Content Area (Offset by sidebar width on desktop) */}
       <div className="flex-1 flex flex-col min-w-0 md:pl-64 lg:pl-72 transition-all">
-        {/* Top Announcement Bar */}
-        <div className="bg-[#431fb9] text-white text-[11px] py-1.5 px-4 sm:px-6 flex items-center justify-between z-20">
-          <div className="flex items-center gap-2 font-medium">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-            <span>PayPal AI Hackathon 2026 — Luminous Ledger Multi-Party Escrow Protocol</span>
-          </div>
-          <button
-            type="button"
-            onClick={() => setViewMode('LANDING')}
-            className="font-bold underline hover:text-[#d6cdff] cursor-pointer"
-          >
-            ← Return to Landing Page
-          </button>
-        </div>
-
         {/* Top Sticky Navigation Bar */}
         <StitchTopBar
           currentPath={currentScreen}

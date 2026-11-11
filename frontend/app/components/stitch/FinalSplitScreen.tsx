@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { ScreenPath } from './StitchHeader';
+import { Modal } from './Modal';
 
 interface FinalSplitScreenProps {
   onNavigate: (path: ScreenPath) => void;
@@ -11,6 +12,8 @@ interface FinalSplitScreenProps {
 export function FinalSplitScreen({ onNavigate, onSettleGroup }: FinalSplitScreenProps) {
   const [isDisbursed, setIsDisbursed] = useState(false);
   const [autoOffset, setAutoOffset] = useState(true);
+  const [isPdfModalOpen, setIsPdfModalOpen] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
 
   const handleDisburse = () => {
     setIsDisbursed(true);
@@ -511,7 +514,7 @@ export function FinalSplitScreen({ onNavigate, onSettleGroup }: FinalSplitScreen
 
             <button
               type="button"
-              onClick={() => alert('Settlement PDF generated with cryptographic verification seals.')}
+              onClick={() => setIsPdfModalOpen(true)}
               className="w-full mt-2.5 py-2.5 px-4 rounded-xl bg-[#f2ebff] hover:bg-[#ece4ff] text-[#431fb9] text-[12px] font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer"
             >
               <span className="material-symbols-outlined text-[16px]">download</span>
@@ -539,6 +542,84 @@ export function FinalSplitScreen({ onNavigate, onSettleGroup }: FinalSplitScreen
           </div>
         </div>
       </div>
+      {/* Settlement PDF Modal */}
+      <Modal
+        isOpen={isPdfModalOpen}
+        onClose={() => {
+          setIsPdfModalOpen(false);
+          setIsDownloading(false);
+        }}
+        title="Settlement Audit Document"
+        subtitle="Cryptographic Certificate • Batch #DXB-8821-EXP"
+        icon="description"
+        iconBg="bg-[#f2ebff]"
+        iconColor="text-[#431fb9]"
+      >
+        <div className="space-y-4">
+          <div className="p-4 rounded-xl bg-[#fdf8ff] border border-[#e6deff] space-y-3">
+            <div className="flex items-center justify-between pb-2 border-b border-[#e6deff]">
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-red-500 text-[22px]">picture_as_pdf</span>
+                <span className="font-bold text-[13px] text-[#1d1833]">
+                  TrustLoad_Dubai_Run_Final_Settlement.pdf
+                </span>
+              </div>
+              <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                Verified
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 text-[12px]">
+              <div>
+                <span className="text-[#797586] block text-[11px]">Total Escrow Processed:</span>
+                <span className="font-bold text-[#1d1833]">$5,000.00 USD</span>
+              </div>
+              <div>
+                <span className="text-[#797586] block text-[11px]">Vendor Releases:</span>
+                <span className="font-bold text-[#431fb9]">$4,412.00 USD</span>
+              </div>
+              <div>
+                <span className="text-[#797586] block text-[11px]">Refunds to Members:</span>
+                <span className="font-bold text-emerald-600">+$588.00 USD</span>
+              </div>
+              <div>
+                <span className="text-[#797586] block text-[11px]">Consensus Quorum:</span>
+                <span className="font-bold text-[#1d1833]">3 of 3 Unanimous</span>
+              </div>
+            </div>
+
+            <div className="text-[10px] text-[#797586] font-mono bg-white p-2 rounded-lg border border-zinc-100">
+              SHA256: 9b2d8f4e1903c73ba547841c6f93284918e983427189bfcc
+            </div>
+          </div>
+
+          <div className="flex items-center justify-end gap-2 pt-2">
+            <button
+              type="button"
+              onClick={() => setIsPdfModalOpen(false)}
+              className="px-4 py-2 rounded-xl bg-white border border-[#e6deff] text-[#484554] text-[13px] font-semibold hover:bg-[#f2ebff] cursor-pointer"
+            >
+              Close
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setIsDownloading(true);
+                setTimeout(() => {
+                  setIsDownloading(false);
+                  setIsPdfModalOpen(false);
+                }, 1500);
+              }}
+              className="px-4 py-2 rounded-xl bg-[#5b3fd1] hover:bg-[#431fb9] text-white text-[13px] font-bold shadow-xs flex items-center gap-1.5 cursor-pointer"
+            >
+              <span className="material-symbols-outlined text-[16px]">
+                {isDownloading ? 'hourglass_top' : 'download'}
+              </span>
+              <span>{isDownloading ? 'Generating...' : 'Download PDF'}</span>
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

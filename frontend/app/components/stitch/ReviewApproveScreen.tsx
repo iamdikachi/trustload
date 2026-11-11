@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { ScreenPath } from './StitchHeader';
+import { Modal } from './Modal';
 
 interface ReviewApproveScreenProps {
   onNavigate: (path: ScreenPath) => void;
@@ -15,6 +16,9 @@ export function ReviewApproveScreen({
   isApproved = false,
 }: ReviewApproveScreenProps) {
   const [approved, setApproved] = useState(isApproved);
+  const [isDisputeModalOpen, setIsDisputeModalOpen] = useState(false);
+  const [disputeReason, setDisputeReason] = useState('Quantity overage (600 billed vs 500 ordered)');
+  const [disputeLogged, setDisputeLogged] = useState(false);
 
   const handleApprove = () => {
     setApproved(true);
@@ -263,7 +267,7 @@ export function ReviewApproveScreen({
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => alert('Dispute logged. Traveler instructed to request amended invoice.')}
+                  onClick={() => setIsDisputeModalOpen(true)}
                   className="w-1/2 py-2.5 rounded-xl bg-[#ece4ff] text-[#484554] hover:bg-[#e6deff] text-[13px] font-semibold transition-all cursor-pointer"
                 >
                   Reject / Hold
@@ -288,6 +292,70 @@ export function ReviewApproveScreen({
           </div>
         </div>
       </div>
+
+      {/* Dispute Modal */}
+      <Modal
+        isOpen={isDisputeModalOpen}
+        onClose={() => setIsDisputeModalOpen(false)}
+        title="Dispute Release Claim"
+        subtitle="Dubai Gadget Wholesale • Invoice #DGW-7741 (AED 6,100)"
+        icon="warning"
+        iconBg="bg-amber-100"
+        iconColor="text-amber-800"
+      >
+        <div className="space-y-4">
+          <p className="text-[13px] text-[#484554] leading-relaxed">
+            Placing a dispute will freeze this release claim. Traveler Chidi O. will be notified to obtain an amended invoice or credit note from the vendor.
+          </p>
+
+          <div className="space-y-2">
+            <label className="text-[11px] uppercase font-bold tracking-wider text-[#797586]">
+              Reason for Dispute
+            </label>
+            <div className="space-y-1.5">
+              {[
+                'Quantity overage (600 billed vs 500 ordered)',
+                'Line items total mismatch (AED 6,340 vs 6,100 claimed)',
+                'Unauthorized item / price deviation',
+              ].map((reason, idx) => (
+                <label
+                  key={idx}
+                  className="flex items-center gap-2.5 p-2.5 rounded-xl border border-[#e6deff] hover:bg-[#fdf8ff] cursor-pointer text-[12px] text-[#1d1833]"
+                >
+                  <input
+                    type="radio"
+                    name="review-dispute-reason"
+                    checked={disputeReason === reason}
+                    onChange={() => setDisputeReason(reason)}
+                    className="accent-[#5b3fd1]"
+                  />
+                  <span>{reason}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div className="pt-2 flex items-center justify-end gap-2 border-t border-zinc-100">
+            <button
+              type="button"
+              onClick={() => setIsDisputeModalOpen(false)}
+              className="px-4 py-2 rounded-xl bg-white border border-[#e6deff] text-[#484554] text-[13px] font-semibold hover:bg-[#f2ebff] cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setDisputeLogged(true);
+                setIsDisputeModalOpen(false);
+              }}
+              className="px-4 py-2 rounded-xl bg-[#ba1a1a] hover:bg-[#93000a] text-white text-[13px] font-bold shadow-xs cursor-pointer transition-colors"
+            >
+              Submit Dispute &amp; Hold
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

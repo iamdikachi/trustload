@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { ScreenPath } from './StitchHeader';
+import { Modal } from './Modal';
 
 interface LedgerScreenProps {
   onNavigate: (path: ScreenPath) => void;
@@ -10,6 +11,8 @@ interface LedgerScreenProps {
 export function LedgerScreen({ onNavigate }: LedgerScreenProps) {
   const [filter, setFilter] = useState<'all' | 'deposit' | 'release' | 'pending'>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedTx, setSelectedTx] = useState<any | null>(null);
+  const [copiedRef, setCopiedRef] = useState(false);
 
   const transactions = [
     {
@@ -393,7 +396,8 @@ export function LedgerScreen({ onNavigate }: LedgerScreenProps) {
                     <button
                       type="button"
                       onClick={() => {
-                        alert(`Transaction audit token: ${tx.ref}\nAnchored to PayPal Sandbox.\nCryptographic status: Verified.`);
+                        setSelectedTx(tx);
+                        setCopiedRef(false);
                       }}
                       className="px-3 py-1.5 rounded-lg bg-[#f7f1ff] hover:bg-[#ece4ff] text-[#431fb9] font-label-md text-[12px] font-semibold transition-colors inline-flex items-center gap-1 cursor-pointer"
                     >
@@ -407,6 +411,86 @@ export function LedgerScreen({ onNavigate }: LedgerScreenProps) {
           </table>
         </div>
       </div>
+      {/* Transaction Receipt Audit Modal */}
+      {selectedTx && (
+        <Modal
+          isOpen={!!selectedTx}
+          onClose={() => {
+            setSelectedTx(null);
+            setCopiedRef(false);
+          }}
+          title="Transaction Receipt &amp; Proof"
+          subtitle={`PayPal Reference: ${selectedTx.ref}`}
+          icon="verified"
+          iconBg="bg-[#f2ebff]"
+          iconColor="text-[#431fb9]"
+        >
+          <div className="space-y-4">
+            <div className="p-4 rounded-xl bg-[#fdf8ff] border border-[#e6deff] space-y-3">
+              <div className="flex items-center justify-between pb-2 border-b border-[#e6deff]">
+                <div>
+                  <h4 className="font-bold text-[14px] text-[#1d1833]">{selectedTx.title}</h4>
+                  <p className="text-[11px] text-[#797586]">{selectedTx.subtitle}</p>
+                </div>
+                <span className="font-['Bricolage_Grotesque',sans-serif] text-lg font-bold text-[#1d1833]">
+                  {selectedTx.amount}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2.5 text-[12px]">
+                <div>
+                  <span className="text-[#797586] block text-[11px]">Member / Entity:</span>
+                  <span className="font-semibold text-[#1d1833]">{selectedTx.member}</span>
+                </div>
+                <div>
+                  <span className="text-[#797586] block text-[11px]">Timestamp:</span>
+                  <span className="font-semibold text-[#1d1833]">{selectedTx.date}</span>
+                </div>
+                <div>
+                  <span className="text-[#797586] block text-[11px]">Audit Status:</span>
+                  <span className="inline-flex items-center gap-1 font-semibold text-emerald-700">
+                    <span className="material-symbols-outlined text-[13px]">verified</span>
+                    {selectedTx.status}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[#797586] block text-[11px]">Consensus Validation:</span>
+                  <span className="font-semibold text-[#431fb9]">Multi-party Quorum Signed</span>
+                </div>
+              </div>
+
+              <div className="p-2.5 rounded-lg bg-white border border-[#e6deff] flex items-center justify-between text-[11px] font-mono">
+                <span className="text-[#484554] truncate mr-2">{selectedTx.ref}</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(selectedTx.ref);
+                    setCopiedRef(true);
+                    setTimeout(() => setCopiedRef(false), 2000);
+                  }}
+                  className="text-[#5b3fd1] font-bold hover:underline shrink-0"
+                >
+                  {copiedRef ? 'Copied ✓' : 'Copy Ref'}
+                </button>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-1 text-[11px] text-[#797586]">
+              <span className="flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                Anchored to PayPal Sandbox Distributed Ledger
+              </span>
+              <button
+                type="button"
+                onClick={() => setSelectedTx(null)}
+                className="px-4 py-2 rounded-xl bg-[#5b3fd1] hover:bg-[#431fb9] text-white text-[12px] font-bold shadow-xs cursor-pointer"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
