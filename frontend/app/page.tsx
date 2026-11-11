@@ -74,6 +74,27 @@ export default function Home() {
     fetchLiveBackend();
   }, [fetchLiveBackend]);
 
+  // Deep linking & handling redirect returns (e.g. from PayPal)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const view = params.get('view');
+      const screen = params.get('screen') as ScreenPath | null;
+      const paid = params.get('paid');
+
+      if (view === 'app' || screen) {
+        setViewMode('APP');
+      }
+      if (screen) {
+        setCurrentScreen(screen);
+      }
+      if (paid === 'true') {
+        showToast('PayPal contribution successfully captured! Escrow vault & ledger updated.');
+        fetchLiveBackend();
+      }
+    }
+  }, [fetchLiveBackend]);
+
   const activeGroup = liveGroups.find((g) => g.id === selectedGroupId) || (liveGroups.length > 0 ? liveGroups[0] : null);
 
   const handleApproveRelease = async () => {

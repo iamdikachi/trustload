@@ -27,13 +27,18 @@ export function PayContributionScreen({
       if (groupId) {
         const memId = memberId || 'default-member';
         const order = await api.createContributionOrder(groupId, memId, 1000, 'USD').catch(() => null);
-        if (order?.orderId) {
+        
+        // If PayPal Sandbox generated an approval URL, route the user to PayPal!
+        if (order?.approvalUrl) {
+          window.location.href = order.approvalUrl;
+          return;
+        } else if (order?.orderId) {
+          // Direct fallback if no approval redirect was required
           await api.captureContributionOrder(order.orderId).catch(() => null);
         }
       }
-    } catch (e) {
-      console.warn('Live contribution notice:', e);
-    } finally {
+      
+      // Fallback in-page confirmation if offline or mock
       setIsProcessing(false);
       setIsPaid(true);
       if (onConfirmPayment) {
@@ -42,6 +47,9 @@ export function PayContributionScreen({
       setTimeout(() => {
         onNavigate('dashboard');
       }, 1200);
+    } catch (e) {
+      console.warn('Live contribution notice:', e);
+      setIsProcessing(false);
     }
   };
 
@@ -219,7 +227,7 @@ export function PayContributionScreen({
                 {isPaid
                   ? 'Contribution Deposited into Escrow ✓'
                   : isProcessing
-                  ? 'Connecting to PayPal Sandbox...'
+                  ? 'Redirecting to PayPal Sandbox...'
                   : 'Confirm & Escrow $1,000 via PayPal Sandbox'}
               </span>
             </button>

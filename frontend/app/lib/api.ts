@@ -174,6 +174,10 @@ export const api = {
     amount: number,
     currency = 'USD'
   ) {
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
+    const returnUrl = `${origin}/paypal/return?groupId=${encodeURIComponent(groupId)}&memberId=${encodeURIComponent(memberId)}`;
+    const cancelUrl = `${origin}/paypal/cancel?groupId=${encodeURIComponent(groupId)}`;
+
     const res = await fetch(
       `${API_BASE}/groups/${groupId}/members/${memberId}/contributions/orders`,
       {
@@ -184,17 +188,18 @@ export const api = {
           memberId,
           amount,
           currency,
-          returnUrl: 'http://localhost:3000/paypal/return',
-          cancelUrl: 'http://localhost:3000/paypal/cancel',
+          returnUrl,
+          cancelUrl,
         }),
       }
     );
-    return handleResponse<{
-      orderId: string;
-      status: string;
-      approvalUrl?: string;
-      contribution: Contribution;
-    }>(res);
+    const data = await handleResponse<any>(res);
+    return {
+      orderId: (data.paypalOrder?.id || data.orderId || data.contribution?.paypalOrderId) as string,
+      status: (data.paypalOrder?.status || data.status) as string,
+      approvalUrl: (data.paypalOrder?.approveUrl || data.approvalUrl) as string | undefined,
+      contribution: data.contribution as Contribution,
+    };
   },
 
   async createContributionOrderDirect(data: {
@@ -203,17 +208,27 @@ export const api = {
     amount: number;
     currency?: string;
   }) {
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
+    const returnUrl = `${origin}/paypal/return?groupId=${encodeURIComponent(data.groupId)}&memberId=${encodeURIComponent(data.memberId)}`;
+    const cancelUrl = `${origin}/paypal/cancel?groupId=${encodeURIComponent(data.groupId)}`;
+
     const res = await fetch(`${API_BASE}/contributions/orders`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         ...data,
         currency: data.currency || 'USD',
-        returnUrl: 'http://localhost:3000/paypal/return',
-        cancelUrl: 'http://localhost:3000/paypal/cancel',
+        returnUrl,
+        cancelUrl,
       }),
     });
-    return handleResponse(res);
+    const result = await handleResponse<any>(res);
+    return {
+      orderId: (result.paypalOrder?.id || result.orderId || result.contribution?.paypalOrderId) as string,
+      status: (result.paypalOrder?.status || result.status) as string,
+      approvalUrl: (result.paypalOrder?.approveUrl || result.approvalUrl) as string | undefined,
+      contribution: result.contribution as Contribution,
+    };
   },
 
   async captureContributionOrder(paypalOrderId: string) {
