@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { ScreenPath } from './StitchHeader';
+import { api } from '../../lib/api';
 
 interface StitchTopBarProps {
   currentPath: ScreenPath;
@@ -83,10 +84,44 @@ export function StitchTopBar({
   onOpenMobileSidebar,
   tripName = 'Phone accessories, Dubai run',
 }: StitchTopBarProps) {
+  const [fxList, setFxList] = useState<CurrencyRate[]>(FX_RATES);
+  const [isLiveFx, setIsLiveFx] = useState(false);
   const [isFxOpen, setIsFxOpen] = useState(false);
   const [selectedCurrencyIndex, setSelectedCurrencyIndex] = useState(0);
   const [calcUsdAmount, setCalcUsdAmount] = useState('100');
   const fxDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    api.getFxRates('USD')
+      .then((res: any) => {
+        if (res && res.rates) {
+          setIsLiveFx(true);
+          const rateMap: Record<string, number> = {};
+          if (Array.isArray(res.rates)) {
+            res.rates.forEach((r: any) => {
+              rateMap[r.currency] = r.unitsPerBase || (1 / r.fxRate);
+            });
+          } else {
+            Object.assign(rateMap, res.rates);
+          }
+          setFxList((prev) =>
+            prev.map((item) => {
+              const liveVal = rateMap[item.code];
+              if (liveVal) {
+                return {
+                  ...item,
+                  ratePerUsd: Math.round(liveVal * 100) / 100,
+                  inversePerUnit: `$${(1 / liveVal).toFixed(4)}`,
+                  marketNote: `Live Spot Rate (Backend /fx-rates)`,
+                };
+              }
+              return item;
+            })
+          );
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   // Left Slide-over Notifications Drawer State
   const [isNotificationsDrawerOpen, setIsNotificationsDrawerOpen] = useState(false);
@@ -161,7 +196,7 @@ export function StitchTopBar({
     };
   }, []);
 
-  const activeRate = FX_RATES[selectedCurrencyIndex];
+  const activeRate = fxList[selectedCurrencyIndex] || fxList[0];
   const numAmount = parseFloat(calcUsdAmount) || 0;
   const convertedTotal = (numAmount * activeRate.ratePerUsd).toLocaleString('en-US', {
     maximumFractionDigits: 2,
@@ -252,7 +287,7 @@ export function StitchTopBar({
                     <div className="text-[10px] uppercase font-bold tracking-wider text-[#797586] px-1 pb-0.5">
                       Select Display Rate
                     </div>
-                    {FX_RATES.map((curr, idx) => {
+                    {fxList.map((curr, idx) => {
                       const isSelected = selectedCurrencyIndex === idx;
                       return (
                         <div

@@ -147,29 +147,6 @@ export function StitchSidebar({
             )}
           </div>
 
-          {/* Active Vault Card */}
-          <div className="p-3.5 m-3 rounded-xl bg-[#f7f1ff] border border-[#e6deff] flex flex-col gap-1.5">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] uppercase font-bold tracking-wider text-[#797586]">
-                Active Buying Trip
-              </span>
-              <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#e7deff] text-[#1f005f]">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                Sandbox
-              </span>
-            </div>
-            <div
-              onClick={() => handleItemClick('dashboard')}
-              className="font-bold text-[13px] text-[#1d1833] hover:text-[#431fb9] cursor-pointer transition-colors truncate"
-            >
-              {tripName}
-            </div>
-            <div className="flex items-center justify-between text-[11px] text-[#484554]">
-              <span>{travelerName}</span>
-              <span className="font-semibold text-[#431fb9]">{quorumPolicy} quorum</span>
-            </div>
-          </div>
-
           {/* Main Navigation */}
           <div className="px-3 py-2 space-y-1">
             <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-[#797586]">

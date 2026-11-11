@@ -25,8 +25,71 @@ async function handleResponse<T>(res: Response): Promise<T> {
   return res.json();
 }
 
+export interface EndpointDescriptor {
+  id: string;
+  category: 'GROUPS' | 'CONTRIBUTIONS' | 'RELEASES' | 'FX' | 'AI_RECEIPTS' | 'SETTLEMENT';
+  method: 'GET' | 'POST';
+  path: string;
+  summary: string;
+}
+
+export const ENDPOINT_REGISTRY: EndpointDescriptor[] = [
+  // System Root
+  { id: 'root', category: 'GROUPS', method: 'GET', path: '/', summary: 'Root API Health & Version Info' },
+  // Groups Domain
+  { id: 'createGroup', category: 'GROUPS', method: 'POST', path: '/groups', summary: 'Create Buying Group with Traveler & Orders' },
+  { id: 'listGroups', category: 'GROUPS', method: 'GET', path: '/groups', summary: 'List All Escrow Buying Groups' },
+  { id: 'getGroupById', category: 'GROUPS', method: 'GET', path: '/groups/:id', summary: 'Get Group by ID with Members & Pot Metrics' },
+  { id: 'getCombinedOrders', category: 'GROUPS', method: 'GET', path: '/groups/:id/orders', summary: 'Get Aggregate Order Line Manifest' },
+  { id: 'addMember', category: 'GROUPS', method: 'POST', path: '/groups/:id/members', summary: 'Add Vendor Member to Group' },
+  { id: 'addMemberOrders', category: 'GROUPS', method: 'POST', path: '/groups/:id/members/:memberId/orders', summary: 'Attach Manifest Orders to Member' },
+  // Contributions & Pot Domain
+  { id: 'createContributionOrder', category: 'CONTRIBUTIONS', method: 'POST', path: '/groups/:groupId/members/:memberId/contributions/orders', summary: 'Generate PayPal Sandbox Deposit Order' },
+  { id: 'createContributionOrderDirect', category: 'CONTRIBUTIONS', method: 'POST', path: '/contributions/orders', summary: 'Create PayPal Contribution Order Direct' },
+  { id: 'captureContributionOrder', category: 'CONTRIBUTIONS', method: 'POST', path: '/contributions/orders/:paypalOrderId/capture', summary: 'Capture PayPal Deposit into Vault Pot' },
+  { id: 'getGroupContributions', category: 'CONTRIBUTIONS', method: 'GET', path: '/groups/:groupId/contributions', summary: 'List All Member Contributions' },
+  { id: 'getGroupLedger', category: 'CONTRIBUTIONS', method: 'GET', path: '/groups/:groupId/ledger', summary: 'Get Immutable Vault Pot Ledger Entries' },
+  { id: 'paypalWebhook', category: 'CONTRIBUTIONS', method: 'POST', path: '/webhooks/paypal', summary: 'Simulate/Handle PayPal Sandbox Webhook' },
+  // Release Requests Domain
+  { id: 'createReleaseRequest', category: 'RELEASES', method: 'POST', path: '/groups/:groupId/release-requests', summary: 'Submit Traveler Staged Release Claim with Invoice' },
+  { id: 'createReleaseRequestDirect', category: 'RELEASES', method: 'POST', path: '/release-requests', summary: 'Submit Release Claim (Direct Alias)' },
+  { id: 'getReleaseRequests', category: 'RELEASES', method: 'GET', path: '/groups/:groupId/release-requests', summary: 'List Staged Release Requests for Group' },
+  { id: 'getReleaseRequestById', category: 'RELEASES', method: 'GET', path: '/release-requests/:id', summary: 'Get Single Release Claim Details & Status' },
+  { id: 'getInvoiceDownload', category: 'RELEASES', method: 'GET', path: '/release-requests/:id/invoice', summary: 'Stream/Download Uploaded Invoice File' },
+  { id: 'extractReleaseAi', category: 'RELEASES', method: 'POST', path: '/release-requests/:id/extract', summary: 'Trigger Gemini Multimodal Invoice OCR' },
+  { id: 'verifyReleaseRequest', category: 'RELEASES', method: 'POST', path: '/release-requests/:id/verify', summary: 'Audit Invoice Line-Items Against Group Orders' },
+  { id: 'submitApproval', category: 'RELEASES', method: 'POST', path: '/release-requests/:id/approvals', summary: 'Submit Member Consensus Sign-Off Vote' },
+  { id: 'submitGroupApproval', category: 'RELEASES', method: 'POST', path: '/groups/:groupId/release-requests/:id/approvals', summary: 'Submit Member Consensus Vote (Group Alias)' },
+  { id: 'getApprovals', category: 'RELEASES', method: 'GET', path: '/release-requests/:id/approvals', summary: 'List Recorded Votes and Consensus Quorum' },
+  { id: 'triggerPayout', category: 'RELEASES', method: 'POST', path: '/release-requests/:id/payout', summary: 'Trigger PayPal Payout to Traveler on Quorum' },
+  // Multi-Currency FX Domain
+  { id: 'getFxRates', category: 'FX', method: 'GET', path: '/fx-rates', summary: 'Fetch Real-Time FX Conversion Rates' },
+  { id: 'convertFxRate', category: 'FX', method: 'POST', path: '/fx-rates/convert', summary: 'Convert Currencies with Spot Rates' },
+  // AI OCR, Receipts & Allocations Domain
+  { id: 'aiExtractInvoice', category: 'AI_RECEIPTS', method: 'POST', path: '/ai/invoices/extract', summary: 'Gemini AI Multilingual Invoice OCR Extraction' },
+  { id: 'aiExtractInvoiceAlias', category: 'AI_RECEIPTS', method: 'POST', path: '/ai/extract-invoice', summary: 'Gemini AI Multilingual OCR (Short Alias)' },
+  { id: 'aiVerifyInvoice', category: 'AI_RECEIPTS', method: 'POST', path: '/ai/invoices/verify', summary: 'Gemini AI Arithmetic & Manifest Discrepancy Check' },
+  { id: 'aiVerifyGroupInvoice', category: 'AI_RECEIPTS', method: 'POST', path: '/groups/:groupId/invoices/verify', summary: 'AI Verify Invoice Against Group Manifest' },
+  { id: 'uploadReceipt', category: 'AI_RECEIPTS', method: 'POST', path: '/groups/:groupId/receipts', summary: 'Upload Final Store Receipt for Group Trip' },
+  { id: 'getReceipts', category: 'AI_RECEIPTS', method: 'GET', path: '/groups/:groupId/receipts', summary: 'List All Trip Receipts with OCR Breakdown' },
+  { id: 'allocateReceipts', category: 'AI_RECEIPTS', method: 'POST', path: '/groups/:groupId/receipts/allocate', summary: 'Auto-Allocate Goods & Shared Logistics per Vendor' },
+  { id: 'setAllocations', category: 'AI_RECEIPTS', method: 'POST', path: '/groups/:groupId/allocations', summary: 'Save Member Cost Allocations to Ledger' },
+  { id: 'getAllocations', category: 'AI_RECEIPTS', method: 'GET', path: '/groups/:groupId/allocations', summary: 'Get Final Vendor Allocations & Reconciliation' },
+  // Settlement & Closure Domain
+  { id: 'previewSettlement', category: 'SETTLEMENT', method: 'POST', path: '/groups/:groupId/settlement/preview', summary: 'Preview Net Owed / Refund Balances per Member' },
+  { id: 'settleGroup', category: 'SETTLEMENT', method: 'POST', path: '/groups/:groupId/settlement', summary: 'Disburse PayPal Refunds and Close Escrow Pot' },
+  { id: 'settleGroupAlias', category: 'SETTLEMENT', method: 'POST', path: '/groups/:groupId/settle', summary: 'Disburse PayPal Refunds (Short Alias)' },
+  { id: 'getSettlement', category: 'SETTLEMENT', method: 'GET', path: '/groups/:groupId/settlement', summary: 'Get Cryptographic Audit Settlement Closure' },
+];
+
 export const api = {
-  // Groups
+  // System Root
+  async getRoot(): Promise<{ message: string; version?: string }> {
+    const res = await fetch(`${API_BASE}/`, { cache: 'no-store' });
+    return handleResponse(res);
+  },
+
+  // 1. Groups & Orders
   async getGroups(): Promise<Group[]> {
     const res = await fetch(`${API_BASE}/groups`, { cache: 'no-store' });
     return handleResponse<Group[]>(res);
@@ -68,12 +131,7 @@ export const api = {
     const res = await fetch(`${API_BASE}/groups/${groupId}/orders`, {
       cache: 'no-store',
     });
-    return handleResponse<{
-      groupId: string;
-      items: CombinedOrderItem[];
-      totalGroupBudget: number;
-      totalItemCount: number;
-    }>(res);
+    return handleResponse(res);
   },
 
   async addMemberToGroup(
@@ -109,7 +167,7 @@ export const api = {
     return handleResponse(res);
   },
 
-  // Contributions & Ledger
+  // 2. Contributions, Pot & PayPal
   async createContributionOrder(
     groupId: string,
     memberId: string,
@@ -137,6 +195,25 @@ export const api = {
       approvalUrl?: string;
       contribution: Contribution;
     }>(res);
+  },
+
+  async createContributionOrderDirect(data: {
+    groupId: string;
+    memberId: string;
+    amount: number;
+    currency?: string;
+  }) {
+    const res = await fetch(`${API_BASE}/contributions/orders`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ...data,
+        currency: data.currency || 'USD',
+        returnUrl: 'http://localhost:3000/paypal/return',
+        cancelUrl: 'http://localhost:3000/paypal/cancel',
+      }),
+    });
+    return handleResponse(res);
   },
 
   async captureContributionOrder(paypalOrderId: string) {
@@ -172,7 +249,32 @@ export const api = {
     }>(res);
   },
 
-  // Staged Releases & Approvals
+  async simulatePaypalWebhook(eventData: any) {
+    const res = await fetch(`${API_BASE}/webhooks/paypal`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(eventData),
+    });
+    return handleResponse(res);
+  },
+
+  // 3. Staged Releases & Consensus Approvals
+  async createReleaseRequest(groupId: string, formData: FormData): Promise<ReleaseRequest> {
+    const res = await fetch(`${API_BASE}/groups/${groupId}/release-requests`, {
+      method: 'POST',
+      body: formData,
+    });
+    return handleResponse<ReleaseRequest>(res);
+  },
+
+  async createReleaseRequestDirect(formData: FormData): Promise<ReleaseRequest> {
+    const res = await fetch(`${API_BASE}/release-requests`, {
+      method: 'POST',
+      body: formData,
+    });
+    return handleResponse<ReleaseRequest>(res);
+  },
+
   async getReleaseRequests(groupId: string): Promise<ReleaseRequest[]> {
     const res = await fetch(`${API_BASE}/groups/${groupId}/release-requests`, {
       cache: 'no-store',
@@ -180,12 +282,23 @@ export const api = {
     return handleResponse<ReleaseRequest[]>(res);
   },
 
-  async createReleaseRequest(groupId: string, formData: FormData): Promise<ReleaseRequest> {
-    const res = await fetch(`${API_BASE}/groups/${groupId}/release-requests`, {
-      method: 'POST',
-      body: formData,
+  async getReleaseRequestById(id: string): Promise<ReleaseRequest> {
+    const res = await fetch(`${API_BASE}/release-requests/${id}`, {
+      cache: 'no-store',
     });
     return handleResponse<ReleaseRequest>(res);
+  },
+
+  getInvoiceDownloadUrl(id: string): string {
+    return `${API_BASE}/release-requests/${id}/invoice`;
+  },
+
+  async extractInvoiceAi(id: string) {
+    const res = await fetch(`${API_BASE}/release-requests/${id}/extract`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    return handleResponse(res);
   },
 
   async verifyReleaseRequest(id: string) {
@@ -218,6 +331,30 @@ export const api = {
     }>(res);
   },
 
+  async submitGroupApproval(
+    groupId: string,
+    releaseRequestId: string,
+    data: { memberId: string; decision: 'APPROVED' | 'REJECTED'; comment?: string }
+  ) {
+    const res = await fetch(
+      `${API_BASE}/groups/${groupId}/release-requests/${releaseRequestId}/approvals`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      }
+    );
+    return handleResponse(res);
+  },
+
+  async getApprovals(releaseRequestId: string): Promise<Approval[]> {
+    const res = await fetch(
+      `${API_BASE}/release-requests/${releaseRequestId}/approvals`,
+      { cache: 'no-store' }
+    );
+    return handleResponse<Approval[]>(res);
+  },
+
   async triggerPayout(releaseRequestId: string) {
     const res = await fetch(
       `${API_BASE}/release-requests/${releaseRequestId}/payout`,
@@ -229,7 +366,7 @@ export const api = {
     return handleResponse(res);
   },
 
-  // FX Rates
+  // 4. Multi-Currency FX Rates
   async getFxRates(baseCurrency = 'USD') {
     const res = await fetch(`${API_BASE}/fx-rates?baseCurrency=${baseCurrency}`, {
       cache: 'no-store',
@@ -241,7 +378,54 @@ export const api = {
     }>(res);
   },
 
-  // Final Receipts & Allocation
+  async convertFxRate(data: { amount: number; from: string; to: string }) {
+    const res = await fetch(`${API_BASE}/fx-rates/convert`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    return handleResponse<{
+      originalAmount: number;
+      from: string;
+      to: string;
+      rate: number;
+      convertedAmount: number;
+    }>(res);
+  },
+
+  // 5. Multimodal AI OCR, Receipts & Allocations
+  async aiExtractInvoice(formData: FormData) {
+    const res = await fetch(`${API_BASE}/ai/invoices/extract`, {
+      method: 'POST',
+      body: formData,
+    });
+    return handleResponse(res);
+  },
+
+  async aiExtractInvoiceAlias(formData: FormData) {
+    const res = await fetch(`${API_BASE}/ai/extract-invoice`, {
+      method: 'POST',
+      body: formData,
+    });
+    return handleResponse(res);
+  },
+
+  async aiVerifyInvoice(formData: FormData) {
+    const res = await fetch(`${API_BASE}/ai/invoices/verify`, {
+      method: 'POST',
+      body: formData,
+    });
+    return handleResponse(res);
+  },
+
+  async aiVerifyGroupInvoice(groupId: string, formData: FormData) {
+    const res = await fetch(`${API_BASE}/groups/${groupId}/invoices/verify`, {
+      method: 'POST',
+      body: formData,
+    });
+    return handleResponse(res);
+  },
+
   async getReceipts(groupId: string): Promise<Receipt[]> {
     const res = await fetch(`${API_BASE}/groups/${groupId}/receipts`, {
       cache: 'no-store',
@@ -276,6 +460,25 @@ export const api = {
     return handleResponse(res);
   },
 
+  async setAllocations(
+    groupId: string,
+    data: {
+      allocations: Array<{
+        memberId: string;
+        goodsTotal: number;
+        sharedCostShare: number;
+        netOwedOrRefund: number;
+      }>;
+    }
+  ) {
+    const res = await fetch(`${API_BASE}/groups/${groupId}/allocations`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    return handleResponse(res);
+  },
+
   async getAllocations(groupId: string): Promise<{
     groupId: string;
     allocations: Allocation[];
@@ -293,21 +496,30 @@ export const api = {
     return handleResponse(res);
   },
 
-  // Settlement & Refunds
-  async previewSettlement(groupId: string) {
+  // 6. Settlement & Closure
+  async previewSettlement(groupId: string, data: Record<string, any> = {}) {
     const res = await fetch(`${API_BASE}/groups/${groupId}/settlement/preview`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({}),
+      body: JSON.stringify(data),
     });
     return handleResponse(res);
   },
 
-  async settleGroup(groupId: string) {
+  async settleGroup(groupId: string, data: Record<string, any> = {}) {
     const res = await fetch(`${API_BASE}/groups/${groupId}/settlement`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({}),
+      body: JSON.stringify(data),
+    });
+    return handleResponse(res);
+  },
+
+  async settleGroupAlias(groupId: string, data: Record<string, any> = {}) {
+    const res = await fetch(`${API_BASE}/groups/${groupId}/settle`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
     });
     return handleResponse(res);
   },

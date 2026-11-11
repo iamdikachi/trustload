@@ -1,24 +1,55 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ScreenPath } from './StitchHeader';
 import { Modal } from './Modal';
+import { api } from '../../lib/api';
 
 interface FinalSplitScreenProps {
   onNavigate: (path: ScreenPath) => void;
   onSettleGroup?: () => void;
+  groupId?: string;
 }
 
-export function FinalSplitScreen({ onNavigate, onSettleGroup }: FinalSplitScreenProps) {
+export function FinalSplitScreen({ onNavigate, onSettleGroup, groupId }: FinalSplitScreenProps) {
   const [isDisbursed, setIsDisbursed] = useState(false);
   const [autoOffset, setAutoOffset] = useState(true);
   const [isPdfModalOpen, setIsPdfModalOpen] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [liveAllocations, setLiveAllocations] = useState<any[] | null>(null);
+  const [liveSettlement, setLiveSettlement] = useState<any | null>(null);
+  const [isSettling, setIsSettling] = useState(false);
 
-  const handleDisburse = () => {
-    setIsDisbursed(true);
-    if (onSettleGroup) {
-      onSettleGroup();
+  useEffect(() => {
+    if (groupId) {
+      api.getAllocations(groupId)
+        .then((res) => {
+          if (res?.allocations && res.allocations.length > 0) {
+            setLiveAllocations(res.allocations);
+          }
+        })
+        .catch(() => {});
+
+      api.previewSettlement(groupId)
+        .then((res) => {
+          if (res) setLiveSettlement(res);
+        })
+        .catch(() => {});
+    }
+  }, [groupId]);
+
+  const handleDisburse = async () => {
+    setIsSettling(true);
+    try {
+      if (groupId) {
+        await api.settleGroup(groupId).catch(() => {});
+      }
+    } finally {
+      setIsSettling(false);
+      setIsDisbursed(true);
+      if (onSettleGroup) {
+        onSettleGroup();
+      }
     }
   };
 

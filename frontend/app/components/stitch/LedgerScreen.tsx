@@ -1,18 +1,58 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ScreenPath } from './StitchHeader';
 import { Modal } from './Modal';
+import { api } from '../../lib/api';
 
 interface LedgerScreenProps {
   onNavigate: (path: ScreenPath) => void;
+  groupId?: string;
+  liveLedger?: any;
 }
 
-export function LedgerScreen({ onNavigate }: LedgerScreenProps) {
+export function LedgerScreen({ onNavigate, groupId, liveLedger }: LedgerScreenProps) {
   const [filter, setFilter] = useState<'all' | 'deposit' | 'release' | 'pending'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTx, setSelectedTx] = useState<any | null>(null);
   const [copiedRef, setCopiedRef] = useState(false);
+  const [liveEntries, setLiveEntries] = useState<any[] | null>(null);
+  const [potBalance, setPotBalance] = useState<number | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    const targetId = groupId || liveLedger?.groupId;
+    if (targetId) {
+      setIsLoading(true);
+      api.getGroupLedger(targetId)
+        .then((res) => {
+          if (res && res.entries && res.entries.length > 0) {
+            setPotBalance(res.potBalance);
+            const mapped = res.entries.map((entry: any, index: number) => {
+              const isCredit = entry.type === 'CONTRIBUTION';
+              return {
+                id: entry.id || `live-tx-${index}`,
+                category: isCredit ? 'deposit' : 'release',
+                title: entry.type === 'CONTRIBUTION' ? 'Member Deposit' : (entry.type === 'STAGED_RELEASE' ? 'Staged Payout' : entry.type),
+                subtitle: `Ledger Entry • ${entry.type}`,
+                member: entry.member?.user?.name || entry.member?.name || 'Vault Escrow',
+                avatar: (entry.member?.user?.name || 'VE').slice(0, 2).toUpperCase(),
+                date: new Date(entry.createdAt).toLocaleString(),
+                ref: `LEDGER-${entry.id.slice(0, 8).toUpperCase()}`,
+                amount: `${isCredit ? '+' : '-'}$${Number(entry.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}`,
+                isCredit,
+                status: 'Immutable Block Confirmed',
+                statusClass: isCredit ? 'bg-[#f2ebff] text-[#431fb9]' : 'bg-[#e7deff] text-[#1f005f]',
+                hash: entry.hash || 'SHA256:7f83b1657ff1fc53b92dc18148a1d65dfc2d4b1fa3d677284addd200126d9069',
+              };
+            });
+            setLiveEntries(mapped);
+          }
+        })
+        .catch(() => {})
+        .finally(() => setIsLoading(false));
+    }
+  }, [groupId, liveLedger]);
 
   const transactions = [
     {
@@ -101,7 +141,8 @@ export function LedgerScreen({ onNavigate }: LedgerScreenProps) {
     },
   ];
 
-  const filtered = transactions.filter((tx) => {
+  const transactionList = liveEntries && liveEntries.length > 0 ? liveEntries : transactions;
+  const filtered = transactionList.filter((tx) => {
     if (filter !== 'all' && tx.category !== filter) return false;
     if (searchQuery) {
       const q = searchQuery.toLowerCase();

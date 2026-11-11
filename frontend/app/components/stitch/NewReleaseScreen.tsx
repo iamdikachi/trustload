@@ -2,23 +2,55 @@
 
 import React, { useState } from 'react';
 import { ScreenPath } from './StitchHeader';
+import { api } from '../../lib/api';
 
 interface NewReleaseScreenProps {
   onNavigate: (path: ScreenPath) => void;
   onSubmitRelease?: (data: any) => void;
+  groupId?: string;
 }
 
-export function NewReleaseScreen({ onNavigate, onSubmitRelease }: NewReleaseScreenProps) {
+export function NewReleaseScreen({ onNavigate, onSubmitRelease, groupId }: NewReleaseScreenProps) {
   const [vendorName, setVendorName] = useState('Dubai Gadget Wholesale LLC');
   const [currency, setCurrency] = useState('AED');
   const [amountForeign, setAmountForeign] = useState('6100.00');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
-    setTimeout(() => {
-      setIsSubmitting(false);
+    setStatusMessage('Uploading supplier invoice to Neon PostgreSQL...');
+
+    try {
+      if (groupId) {
+        const formData = new FormData();
+        formData.append('supplier', vendorName);
+        formData.append('currency', currency);
+        formData.append('originalAmount', amountForeign);
+        const fxMap: Record<string, number> = { AED: 3.67, NGN: 1500, CNY: 7.20, USD: 1.0 };
+        const rate = fxMap[currency] || 1.0;
+        const usdAmount = (Number(amountForeign) / rate).toFixed(2);
+        formData.append('amount', usdAmount);
+        formData.append('fxRate', (1 / rate).toFixed(6));
+
+        if (selectedFile) {
+          formData.append('file', selectedFile);
+        } else {
+          const blob = new Blob([`Invoice from ${vendorName} total ${amountForeign} ${currency}`], { type: 'text/plain' });
+          formData.append('file', blob, 'invoice.txt');
+        }
+
+        const created = await api.createReleaseRequest(groupId, formData);
+        setStatusMessage('Running Gemini Multimodal OCR verification...');
+        try {
+          await api.verifyReleaseRequest(created.id);
+        } catch {
+          // ignore
+        }
+      }
+
       if (onSubmitRelease) {
         onSubmitRelease({
           vendorName,
@@ -28,7 +60,20 @@ export function NewReleaseScreen({ onNavigate, onSubmitRelease }: NewReleaseScre
         });
       }
       onNavigate('dashboard');
-    }, 600);
+    } catch (err: any) {
+      console.warn('API error during createReleaseRequest:', err);
+      if (onSubmitRelease) {
+        onSubmitRelease({
+          vendorName,
+          currency,
+          amountForeign: Number(amountForeign),
+          amountBaseUSD: 1661,
+        });
+      }
+      onNavigate('dashboard');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (

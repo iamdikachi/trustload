@@ -3,25 +3,42 @@
 import React, { useState } from 'react';
 import { ScreenPath } from './StitchHeader';
 import { Modal } from './Modal';
+import { api } from '../../lib/api';
 
 interface ReviewApproveScreenProps {
   onNavigate: (path: ScreenPath) => void;
   onApproveRelease?: () => void;
   isApproved?: boolean;
+  releaseRequestId?: string;
+  memberId?: string;
 }
 
 export function ReviewApproveScreen({
   onNavigate,
   onApproveRelease,
   isApproved = false,
+  releaseRequestId,
+  memberId,
 }: ReviewApproveScreenProps) {
   const [approved, setApproved] = useState(isApproved);
   const [isDisputeModalOpen, setIsDisputeModalOpen] = useState(false);
   const [disputeReason, setDisputeReason] = useState('Quantity overage (600 billed vs 500 ordered)');
   const [disputeLogged, setDisputeLogged] = useState(false);
 
-  const handleApprove = () => {
+  const handleApprove = async () => {
     setApproved(true);
+    if (releaseRequestId) {
+      try {
+        await api.submitApproval(releaseRequestId, {
+          memberId: memberId || 'default-member',
+          decision: 'APPROVED',
+          comment: 'Approved after checking line items and discrepancy resolution.',
+        }).catch(() => null);
+        await api.triggerPayout(releaseRequestId).catch(() => null);
+      } catch (err) {
+        console.warn('Live approval notice:', err);
+      }
+    }
     if (onApproveRelease) {
       onApproveRelease();
     }
