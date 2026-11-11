@@ -572,7 +572,7 @@ export class ReleaseRequestsService {
     });
 
     return this.prisma.$transaction(
-      async (tx) => {
+      async (tx: Prisma.TransactionClient) => {
         const current = await tx.releaseRequest.findUniqueOrThrow({
           where: { id: releaseRequestId },
         });

@@ -7,6 +7,7 @@ import {
   ContributionStatus,
   GroupStatus,
   LedgerEntryType,
+  Prisma,
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -198,7 +199,7 @@ export class ContributionsService {
     const { paypalOrderId, paypalCaptureId } = params;
 
     return this.prisma.$transaction(
-      async (tx) => {
+      async (tx: Prisma.TransactionClient) => {
         const contribution = await tx.contribution.findUnique({
           where: { paypalOrderId },
           include: {

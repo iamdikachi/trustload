@@ -7,6 +7,7 @@ import {
   ContributionStatus,
   GroupStatus,
   LedgerEntryType,
+  Prisma,
   SharedCostRule,
 } from '@prisma/client';
 import { ContributionsService } from '../contributions/contributions.service';
@@ -446,7 +447,7 @@ export class SettlementService {
       });
 
       const refundEntry = await this.prisma.$transaction(
-        async (tx) => {
+        async (tx: Prisma.TransactionClient) => {
           const entry = await tx.ledgerEntry.create({
             data: {
               groupId,
@@ -527,7 +528,7 @@ export class SettlementService {
     const ledger = await this.contributionsService.getGroupLedger(groupId);
 
     const refundEntries = ledger.ledgerEntries.filter(
-      (e) => e.type === LedgerEntryType.REFUND,
+      (e: { type: LedgerEntryType }) => e.type === LedgerEntryType.REFUND,
     );
 
     return {

@@ -139,7 +139,8 @@ export class GroupsService {
       this.normalizeMemberInput(m, idx),
     );
 
-    const createdGroupId = await this.prisma.$transaction(async (tx) => {
+    const createdGroupId = await this.prisma.$transaction(
+      async (tx: Prisma.TransactionClient) => {
       // 1. Resolve or upsert Traveler
       let travelerId = dto.travelerId;
       if (!travelerId && dto.traveler) {
@@ -269,7 +270,7 @@ export class GroupsService {
     await this.ensureGroupExists(groupId);
     const normalized = this.normalizeMemberInput(dto, 0);
 
-    await this.prisma.$transaction(async (tx) => {
+    await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       let userId = normalized.userId;
       if (!userId && normalized.email && normalized.name) {
         const vendorUser = await tx.user.upsert({
