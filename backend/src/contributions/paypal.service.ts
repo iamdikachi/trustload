@@ -42,6 +42,23 @@ export interface PaypalWebhookHeaders {
   [key: string]: string | string[] | undefined;
 }
 
+// Currencies supported directly by PayPal REST APIs:
+// AUD, BRL, CAD, CNY, CZK, DKK, EUR, HKD, HUF, ILS, JPY, MYR, MXN, TWD, NZD, NOK, PHP, PLN, GBP, SGD, SEK, CHF, THB, USD
+const PAYPAL_SUPPORTED_CURRENCIES = new Set([
+  'AUD', 'BRL', 'CAD', 'CNY', 'CZK', 'DKK', 'EUR', 'HKD', 'HUF', 'ILS',
+  'JPY', 'MYR', 'MXN', 'TWD', 'NZD', 'NOK', 'PHP', 'PLN', 'GBP', 'SGD',
+  'SEK', 'CHF', 'THB', 'USD',
+]);
+
+// Deterministic fallback FX rates to USD for non-PayPal checkout currencies (like NGN, AED, GHS, KES, TRY)
+const LOCAL_FX_TO_USD: Record<string, number> = {
+  NGN: 1600.0,
+  AED: 3.6725,
+  GHS: 16.0,
+  KES: 129.0,
+  TRY: 34.0,
+};
+
 @Injectable()
 export class PaypalService {
   private readonly logger = new Logger(PaypalService.name);
@@ -130,6 +147,20 @@ export class PaypalService {
   }): Promise<PaypalOrderResult> {
     const token = await this.getAccessToken();
 
+    let orderCurrency = (params.currency || 'USD').toUpperCase().trim();
+    let orderAmount = params.amount;
+
+    // If currency is not in PayPal REST supported list (e.g. NGN, AED), convert to USD for PayPal checkout
+    if (!PAYPAL_SUPPORTED_CURRENCIES.has(orderCurrency)) {
+      const rate = LOCAL_FX_TO_USD[orderCurrency] || 1.0;
+      const converted = (Number(orderAmount) / rate).toFixed(2);
+      this.logger.log(
+        `Converting unsupported PayPal currency ${orderCurrency} (${orderAmount}) to USD (${converted}) at rate ${rate}`,
+      );
+      orderCurrency = 'USD';
+      orderAmount = converted;
+    }
+
     const payload = {
       intent: 'CAPTURE',
       purchase_units: [
@@ -138,8 +169,8 @@ export class PaypalService {
           custom_id: params.memberId,
           description: params.description.slice(0, 127),
           amount: {
-            currency_code: params.currency,
-            value: params.amount,
+            currency_code: orderCurrency,
+            value: orderAmount,
           },
         },
       ],
@@ -257,6 +288,19 @@ export class PaypalService {
     const token = await this.getAccessToken();
     const senderBatchId = `trustload-rel-${params.releaseRequestId.slice(0, 8)}-${Date.now()}`;
 
+    let payoutCurrency = (params.currency || 'USD').toUpperCase().trim();
+    let payoutAmount = params.amount;
+
+    if (!PAYPAL_SUPPORTED_CURRENCIES.has(payoutCurrency)) {
+      const rate = LOCAL_FX_TO_USD[payoutCurrency] || 1.0;
+      const converted = (Number(payoutAmount) / rate).toFixed(2);
+      this.logger.log(
+        `Converting unsupported PayPal payout currency ${payoutCurrency} (${payoutAmount}) to USD (${converted}) at rate ${rate}`,
+      );
+      payoutCurrency = 'USD';
+      payoutAmount = converted;
+    }
+
     const payload = {
       sender_batch_header: {
         sender_batch_id: senderBatchId,
@@ -268,8 +312,8 @@ export class PaypalService {
         {
           recipient_type: 'EMAIL',
           amount: {
-            value: params.amount,
-            currency: params.currency,
+            value: payoutAmount,
+            currency: payoutCurrency,
           },
           receiver: params.recipientEmail,
           note: params.note.slice(0, 127),
@@ -349,6 +393,19 @@ export class PaypalService {
   }): Promise<PaypalRefundResult> {
     const token = await this.getAccessToken();
 
+    let refundCurrency = (params.currency || 'USD').toUpperCase().trim();
+    let refundAmount = params.amount;
+
+    if (!PAYPAL_SUPPORTED_CURRENCIES.has(refundCurrency)) {
+      const rate = LOCAL_FX_TO_USD[refundCurrency] || 1.0;
+      const converted = (Number(refundAmount) / rate).toFixed(2);
+      this.logger.log(
+        `Converting unsupported PayPal refund currency ${refundCurrency} (${refundAmount}) to USD (${converted}) at rate ${rate}`,
+      );
+      refundCurrency = 'USD';
+      refundAmount = converted;
+    }
+
     // 1. Attempt PayPal Captures Refund API (/v2/payments/captures/:captureId/refund) when captureId is present
     if (
       params.paypalCaptureId &&
@@ -366,8 +423,8 @@ export class PaypalService {
           },
           body: JSON.stringify({
             amount: {
-              value: params.amount,
-              currency_code: params.currency,
+              value: refundAmount,
+              currency_code: refundCurrency,
             },
             note_to_payer: params.note.slice(0, 255),
           }),
