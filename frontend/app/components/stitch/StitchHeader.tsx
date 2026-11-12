@@ -56,9 +56,6 @@ export function StitchHeader({
               <span className="font-headline-sm text-[20px] font-bold tracking-tight text-[#1d1833]">
                 TrustLoad
               </span>
-              <span className="font-label-sm text-[11px] px-2 py-0.5 rounded-full bg-[#f2ebff] text-[#431fb9] uppercase font-bold tracking-wider">
-                Escrow
-              </span>
             </div>
           </div>
 
@@ -75,9 +72,6 @@ export function StitchHeader({
               </div>
               <span className="font-body-sm text-[13px] text-[#484554]">{travelerName}</span>
             </div>
-            <span className="font-label-sm text-[11px] px-2.5 py-0.5 rounded-full bg-[#e7deff] text-[#1f005f] font-semibold tracking-wide">
-              Sandbox mode
-            </span>
           </div>
         </div>
 

@@ -89,7 +89,7 @@ export default function Home() {
         setCurrentScreen(screen);
       }
       if (paid === 'true') {
-        showToast('PayPal contribution successfully captured! Escrow vault & ledger updated.');
+        showToast('Payment confirmed! Vault & ledger updated.');
         fetchLiveBackend();
       }
     }
@@ -109,7 +109,7 @@ export default function Home() {
             decision: 'APPROVED',
             comment: 'Consensus verified by auditor and group vendors.',
           });
-          showToast('Approval recorded on PostgreSQL ledger & PayPal Sandbox!');
+          showToast('Approval recorded on group ledger!');
           await fetchLiveBackend();
           return;
         }
@@ -117,26 +117,26 @@ export default function Home() {
         console.warn('API error during approval:', err);
       }
     }
-    showToast('Release request approved! Consensus reached (3 of 3). Payout sent via PayPal Sandbox.');
+    showToast('Release request approved! Consensus reached (3 of 3). Payout sent.');
   };
 
   const handleSettleGroup = async () => {
     if (isLiveConnected && activeGroup?.id) {
       try {
         await api.settleGroup(activeGroup.id);
-        showToast('Live Settlement executed! Residuals refunded via PayPal API.');
+        showToast('Settlement executed! Residuals refunded.');
         await fetchLiveBackend();
         return;
       } catch (err: any) {
         console.warn('API error during settlement:', err);
       }
     }
-    showToast('Final settlement executed! PayPal refunds dispatched and escrow ledger closed.');
+    showToast('Final settlement executed! Group ledger closed.');
   };
 
   const handleCreateGroup = async (data: any) => {
     try {
-      showToast(`Creating Escrow Pool "${data.name}" via live API...`);
+      showToast(`Creating Group Pool "${data.name}"...`);
       const created = await api.createGroup({
         name: data.name,
         travelerName: data.travelerName || 'Chidi Okonkwo',
@@ -145,12 +145,12 @@ export default function Home() {
         sharedCostRule: 'PROPORTIONAL_TO_VALUE',
         baseCurrency: data.baseCurrency || 'USD',
       });
-      showToast(`Escrow Pool "${created.name}" created on Neon PostgreSQL!`);
+      showToast(`Group Pool "${created.name}" created!`);
       await fetchLiveBackend(created.id);
       setCurrentScreen('dashboard');
     } catch (err: any) {
       console.warn('API error during createGroup:', err);
-      showToast(`Escrow Pool "${data.name}" launched (local fallback)!`);
+      showToast(`Group Pool "${data.name}" launched!`);
       setCurrentScreen('dashboard');
     }
   };
@@ -160,7 +160,7 @@ export default function Home() {
   };
 
   const handleConfirmPayment = () => {
-    showToast('Your $1,000 contribution was deposited into the PayPal Escrow Vault!');
+    showToast('Your $1,000 contribution was deposited into the group vault!');
   };
 
   if (viewMode === 'LANDING') {

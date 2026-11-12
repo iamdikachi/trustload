@@ -35,8 +35,8 @@ export function LedgerScreen({ onNavigate, groupId, liveLedger }: LedgerScreenPr
                 category: isCredit ? 'deposit' : 'release',
                 title: entry.type === 'CONTRIBUTION' ? 'Member Deposit' : (entry.type === 'STAGED_RELEASE' ? 'Staged Payout' : entry.type),
                 subtitle: `Ledger Entry • ${entry.type}`,
-                member: entry.member?.user?.name || entry.member?.name || 'Vault Escrow',
-                avatar: (entry.member?.user?.name || 'VE').slice(0, 2).toUpperCase(),
+                member: entry.member?.user?.name || entry.member?.name || 'Group Vault',
+                avatar: (entry.member?.user?.name || 'GV').slice(0, 2).toUpperCase(),
                 date: new Date(entry.createdAt).toLocaleString(),
                 ref: `LEDGER-${entry.id.slice(0, 8).toUpperCase()}`,
                 amount: `${isCredit ? '+' : '-'}$${Number(entry.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}`,
@@ -66,7 +66,7 @@ export function LedgerScreen({ onNavigate, groupId, liveLedger }: LedgerScreenPr
       ref: 'PP-TX-99482103',
       amount: '+$1,000.00',
       isCredit: true,
-      status: 'Escrowed / Cleared',
+      status: 'Cleared & Settled',
       statusClass: 'bg-[#f2ebff] text-[#431fb9]',
     },
     {
@@ -108,7 +108,7 @@ export function LedgerScreen({ onNavigate, groupId, liveLedger }: LedgerScreenPr
       ref: 'PP-TX-77491028',
       amount: '+$1,000.00',
       isCredit: true,
-      status: 'Escrowed / Cleared',
+      status: 'Cleared & Settled',
       statusClass: 'bg-[#f2ebff] text-[#431fb9]',
     },
     {
@@ -122,7 +122,7 @@ export function LedgerScreen({ onNavigate, groupId, liveLedger }: LedgerScreenPr
       ref: 'PP-TX-66381920',
       amount: '+$1,000.00',
       isCredit: true,
-      status: 'Escrowed / Cleared',
+      status: 'Cleared & Settled',
       statusClass: 'bg-[#f2ebff] text-[#431fb9]',
     },
     {
@@ -136,7 +136,7 @@ export function LedgerScreen({ onNavigate, groupId, liveLedger }: LedgerScreenPr
       ref: 'PP-TX-55271819',
       amount: '+$1,000.00',
       isCredit: true,
-      status: 'Escrowed / Cleared',
+      status: 'Cleared & Settled',
       statusClass: 'bg-[#f2ebff] text-[#431fb9]',
     },
   ];
@@ -157,6 +157,18 @@ export function LedgerScreen({ onNavigate, groupId, liveLedger }: LedgerScreenPr
 
   return (
     <div className="w-full space-y-6">
+      {/* Back Navigation */}
+      <div>
+        <button
+          type="button"
+          onClick={() => onNavigate('dashboard')}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-[#e6deff] text-[#431fb9] hover:bg-[#f2ebff] text-[13px] font-semibold transition-all shadow-xs cursor-pointer"
+        >
+          <span className="material-symbols-outlined text-[18px]">arrow_back</span>
+          <span>Back to Overview</span>
+        </button>
+      </div>
+
       {/* Header Section */}
       <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
         <div className="space-y-1 max-w-2xl">
@@ -164,17 +176,14 @@ export function LedgerScreen({ onNavigate, groupId, liveLedger }: LedgerScreenPr
             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#ece4ff] text-[#431fb9] font-label-sm text-[11px] uppercase tracking-wider shadow-sm font-bold">
               <span className="material-symbols-outlined text-[14px]">verified_user</span> Multi-Sig Consensus Active
             </span>
-            <span className="font-label-sm text-[11px] text-[#484554] flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#5b3fd1]"></span> Node v2.4-sandbox
-            </span>
           </div>
           <h1 className="font-headline-lg text-3xl sm:text-4xl font-black text-[#1d1833] tracking-tight">
-            Escrow Ledger &amp; Transaction Audit
+            Group Ledger &amp; Audit
           </h1>
           <p className="font-body-md text-[14px] text-[#484554] flex items-center gap-2 flex-wrap">
             <span className="font-semibold text-[#1d1833]">Phone accessories, Dubai run</span>
             <span className="text-[#797586]">•</span>
-            <span>Every naira and dollar anchored to a verified PayPal sandbox transaction.</span>
+            <span>Every naira and dollar anchored to a verified transaction.</span>
           </p>
         </div>
 
@@ -183,27 +192,19 @@ export function LedgerScreen({ onNavigate, groupId, liveLedger }: LedgerScreenPr
           <button
             type="button"
             onClick={() => {
-              const csv = `Timestamp,Transaction,Member,PayPal Reference,Amount,Status\n` +
+              const csv = `Timestamp,Transaction,Member,Reference,Amount,Status\n` +
                 transactions.map(t => `"${t.date}","${t.title}","${t.member}","${t.ref}","${t.amount}","${t.status}"`).join('\n');
               const blob = new Blob([csv], { type: 'text/csv' });
               const url = URL.createObjectURL(blob);
               const a = document.createElement('a');
               a.href = url;
-              a.download = `trustload_escrow_ledger.csv`;
+              a.download = `trustload_group_ledger.csv`;
               a.click();
             }}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#e6deff] text-[#431fb9] hover:bg-[#d6cdff] transition-all font-label-lg text-[13px] font-bold shadow-sm cursor-pointer"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#5b3fd1] text-white hover:bg-[#431fb9] transition-all font-label-lg text-[13px] font-bold shadow-md cursor-pointer"
           >
             <span className="material-symbols-outlined text-[18px]">download</span>
             <span>Export CSV / PDF audit report</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => window.open('https://sandbox.paypal.com', '_blank')}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#5b3fd1] text-white hover:bg-[#431fb9] transition-all font-label-lg text-[13px] font-bold shadow-md cursor-pointer"
-          >
-            <span className="material-symbols-outlined text-[18px]">open_in_new</span>
-            <span>View PayPal Merchant Sandbox</span>
           </button>
         </div>
       </div>
@@ -283,7 +284,7 @@ export function LedgerScreen({ onNavigate, groupId, liveLedger }: LedgerScreenPr
       <div className="bg-white p-4 rounded-2xl shadow-sm border border-[#e6deff] flex flex-col md:flex-row items-center justify-between gap-4">
         <div className="w-full md:w-1/3">
           <div className="flex items-center justify-between text-[12px] mb-1.5">
-            <span className="font-semibold text-[#1d1833]">Escrow Liquidity State</span>
+            <span className="font-semibold text-[#1d1833]">Pool Liquidity State</span>
             <span className="text-[#484554]">49.0% Released • 51.0% Locked</span>
           </div>
           <div className="h-4 w-full bg-[#f2ebff] rounded-full overflow-hidden flex p-0.5 gap-0.5">
@@ -519,7 +520,7 @@ export function LedgerScreen({ onNavigate, groupId, liveLedger }: LedgerScreenPr
             <div className="flex items-center justify-between pt-1 text-[11px] text-[#797586]">
               <span className="flex items-center gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                Anchored to PayPal Sandbox Distributed Ledger
+                Anchored to Verified Transaction Ledger
               </span>
               <button
                 type="button"

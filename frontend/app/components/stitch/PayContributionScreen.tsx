@@ -111,7 +111,7 @@ export function PayContributionScreen({
               <div className="flex items-center gap-2 bg-[#f7f1ff] border border-[#e6deff] px-3 py-2 rounded-xl self-start">
                 <span className="material-symbols-outlined text-[#431fb9] text-[22px]">lock</span>
                 <div className="flex flex-col">
-                  <span className="text-[11px] text-[#1d1833] font-bold leading-tight">256-Bit Escrow Vault</span>
+                  <span className="text-[11px] text-[#1d1833] font-bold leading-tight">Multi-Party Vault</span>
                   <span className="text-[10px] text-[#484554] leading-tight">Pre-funded isolation</span>
                 </div>
               </div>
@@ -141,17 +141,6 @@ export function PayContributionScreen({
 
           {/* Secure Settlement Card */}
           <div className="bg-white rounded-2xl p-6 sm:p-8 shadow-sm border border-[#e6deff] flex flex-col gap-5">
-            {/* Sandbox Banner Alert */}
-            <div className="flex items-center gap-3 p-3.5 rounded-xl bg-[#e7deff] text-[#1f005f]">
-              <span className="material-symbols-outlined text-[20px] text-[#431fb9]">science</span>
-              <div className="flex flex-col">
-                <span className="text-[12px] font-bold">Sandbox Mode Activated</span>
-                <span className="text-[11px]">
-                  Simulated PayPal escrow environment. No real funds will be charged.
-                </span>
-              </div>
-            </div>
-
             {/* Payment Methods */}
             <div className="flex flex-col gap-3">
               <label className="text-[13px] text-[#1d1833] font-semibold flex items-center justify-between">
@@ -172,7 +161,7 @@ export function PayContributionScreen({
                     <div className="w-1.5 h-1.5 rounded-full bg-white"></div>
                   </div>
                   <div className="flex flex-col">
-                    <span className="text-[12px] font-bold text-[#1d1833]">PayPal Escrow</span>
+                    <span className="text-[12px] font-bold text-[#1d1833]">PayPal</span>
                     <span className="text-[10px] text-[#484554]">Recommended</span>
                   </div>
                 </div>
@@ -225,20 +214,20 @@ export function PayContributionScreen({
               </span>
               <span>
                 {isPaid
-                  ? 'Contribution Deposited into Escrow ✓'
+                  ? 'Contribution Confirmed ✓'
                   : isProcessing
-                  ? 'Redirecting to PayPal Sandbox...'
-                  : 'Confirm & Escrow $1,000 via PayPal Sandbox'}
+                  ? 'Connecting to PayPal...'
+                  : 'Confirm & Pay $1,000 via PayPal'}
               </span>
             </button>
           </div>
         </div>
 
-        {/* RIGHT COLUMN: Escrow Protection Protocol */}
+        {/* RIGHT COLUMN: Buyer Protection Protocol */}
         <div className="lg:col-span-5 bg-white rounded-2xl p-6 shadow-sm border border-[#e6deff] space-y-4">
           <div className="flex items-center gap-2 pb-3 border-b border-[#e6deff]">
             <span className="material-symbols-outlined text-[#431fb9] text-[22px]">shield</span>
-            <h3 className="font-bold text-sm text-[#1d1833]">Escrow Protection Protocol</h3>
+            <h3 className="font-bold text-sm text-[#1d1833]">Buyer Protection Protocol</h3>
           </div>
 
           <div className="space-y-3 text-[12px]">

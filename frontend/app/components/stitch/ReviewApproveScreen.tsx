@@ -75,20 +75,22 @@ export function ReviewApproveScreen({
 
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
           <div>
-            <span className="font-label-sm text-[11px] tracking-wider uppercase text-[#484554] font-bold">
-              Escrow Verification Milestone #04
-            </span>
-            <h1 className="font-headline-lg text-2xl sm:text-3xl font-black text-[#1d1833] tracking-tight mt-0.5">
-              Review Escrow Release Claim: Dubai Gadget Wholesale
+            <h1 className="font-headline-lg text-2xl sm:text-3xl font-black text-[#1d1833] tracking-tight">
+              Dubai Gadget Wholesale
             </h1>
+            <p className="text-[13px] text-[#797586] mt-0.5">
+              Invoice #DGW-7741 • Submitted by Traveler Chidi Okonkwo • Consensus 3 of 5
+            </p>
           </div>
           <div className="flex items-center gap-2 self-start md:self-auto">
-            <span className="px-3 py-1 rounded-full bg-[#ece4ff] text-[#484554] text-[11px] font-semibold">
-              Group Safe Pool: DXB-2026
-            </span>
-            <span className="px-3 py-1 rounded-full bg-[#ece4ff] text-[#431fb9] text-[11px] font-semibold">
-              Traveler Payout Ledger
-            </span>
+            <button
+              type="button"
+              onClick={() => onNavigate('new-release')}
+              className="px-3.5 py-2 rounded-xl bg-white border border-[#e6deff] text-[#1d1833] text-[12px] font-semibold hover:bg-[#f2ebff] transition-colors cursor-pointer flex items-center gap-1.5 shadow-xs"
+            >
+              <span className="material-symbols-outlined text-[16px] text-[#5b3fd1]">add_circle</span>
+              <span>Upload New Invoice</span>
+            </button>
           </div>
         </div>
 
@@ -134,7 +136,7 @@ export function ReviewApproveScreen({
           {/* Metric 3: Liquidity Bar */}
           <div className="p-4 rounded-xl bg-white shadow-sm border border-[#e6deff] flex flex-col justify-between">
             <div className="flex items-center justify-between text-[#484554]">
-              <span className="text-[11px] uppercase tracking-wide">Pool Escrow Liquidity</span>
+              <span className="text-[11px] uppercase tracking-wide">Pool Liquidity</span>
               <span className="text-[11px] font-semibold text-[#431fb9]">71.7% Committed</span>
             </div>
             <div className="mt-2">

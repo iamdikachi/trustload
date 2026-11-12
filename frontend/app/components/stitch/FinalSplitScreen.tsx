@@ -55,6 +55,18 @@ export function FinalSplitScreen({ onNavigate, onSettleGroup, groupId }: FinalSp
 
   return (
     <div className="w-full space-y-8">
+      {/* Back Navigation & Breadcrumb */}
+      <div>
+        <button
+          type="button"
+          onClick={() => onNavigate('dashboard')}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-[#e6deff] text-[#431fb9] hover:bg-[#f2ebff] text-[13px] font-semibold transition-all shadow-xs cursor-pointer"
+        >
+          <span className="material-symbols-outlined text-[18px]">arrow_back</span>
+          <span>Back to Overview</span>
+        </button>
+      </div>
+
       {/* Page Header Area */}
       <div className="relative z-10 flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div className="flex flex-col gap-1">
@@ -161,12 +173,12 @@ export function FinalSplitScreen({ onNavigate, onSettleGroup, groupId }: FinalSp
         </div>
       </div>
 
-      {/* Segmented Escrow Liquidity Visualizer */}
+      {/* Segmented Liquidity Visualizer */}
       <div className="bg-white rounded-xl p-5 shadow-sm border border-[#e6deff]">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 mb-3">
           <div className="flex items-center gap-2">
             <span className="font-bold text-[#1d1833] text-[14px]">
-              Escrow Allocation &amp; Safety Cushion
+              Allocation &amp; Safety Cushion
             </span>
             <span className="font-label-sm text-[10px] px-2 py-0.5 rounded-full bg-[#e6deff] text-[#431fb9] font-semibold">
               Active Pot
@@ -216,7 +228,7 @@ export function FinalSplitScreen({ onNavigate, onSettleGroup, groupId }: FinalSp
                 <div>
                   <h2 className="text-lg font-bold text-[#1d1833]">Individual Member Balances</h2>
                   <p className="text-[12px] text-[#484554]">
-                    5 participants verified via biometric passkey &amp; smart escrow receipts
+                    5 participants verified via consensus &amp; verified receipts
                   </p>
                 </div>
                 <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#f2ebff] text-[#484554] text-[11px] font-semibold">
@@ -488,15 +500,15 @@ export function FinalSplitScreen({ onNavigate, onSettleGroup, groupId }: FinalSp
               </div>
             </div>
 
-            {/* Escrow Multi-Sig & Safety Rule Banner */}
+            {/* Multi-Sig & Safety Rule Banner */}
             <div className="mt-4 p-3 rounded-lg bg-[#f7f1ff] border border-[#e6deff] flex items-start gap-2.5">
               <span className="material-symbols-outlined text-[#431fb9] text-[18px] shrink-0 mt-0.5">
                 lock_clock
               </span>
               <div className="flex flex-col gap-0.5">
-                <span className="font-bold text-[12px] text-[#1d1833]">Escrow Safety Rule</span>
+                <span className="font-bold text-[12px] text-[#1d1833]">Group Safety Rule</span>
                 <p className="text-[11px] text-[#484554] leading-relaxed">
-                  Smart escrow consensus ensures funds cannot disburse unless pending payments (<strong className="text-[#1d1833] font-semibold">$529.00</strong>) are cleared or offset against the surplus pool.
+                  Consensus rules ensure funds cannot disburse unless pending payments (<strong className="text-[#1d1833] font-semibold">$529.00</strong>) are cleared or offset against the surplus pool.
                 </p>
               </div>
             </div>
@@ -568,7 +580,7 @@ export function FinalSplitScreen({ onNavigate, onSettleGroup, groupId }: FinalSp
 
             <div className="mt-3 flex items-center gap-1.5 justify-center text-[#797586] text-[11px]">
               <span className="material-symbols-outlined text-[14px]">lock</span>
-              <span>256-Bit Escrow Vault Protected</span>
+              <span>Multi-Sig Vault Protected</span>
             </div>
           </div>
         </div>
@@ -602,7 +614,7 @@ export function FinalSplitScreen({ onNavigate, onSettleGroup, groupId }: FinalSp
 
             <div className="grid grid-cols-2 gap-2 text-[12px]">
               <div>
-                <span className="text-[#797586] block text-[11px]">Total Escrow Processed:</span>
+                <span className="text-[#797586] block text-[11px]">Total Funds Processed:</span>
                 <span className="font-bold text-[#1d1833]">$5,000.00 USD</span>
               </div>
               <div>

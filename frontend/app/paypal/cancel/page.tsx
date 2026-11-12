@@ -39,7 +39,7 @@ function PaypalCancelContent() {
               PayPal Checkout Cancelled
             </h2>
             <p className="text-sm text-[#484554]">
-              You cancelled the transaction in PayPal Sandbox. No funds were debited, and your group share remains unfunded.
+              You cancelled the transaction on PayPal. No funds were debited, and your group share remains unfunded.
             </p>
           </div>
 

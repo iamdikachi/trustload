@@ -95,7 +95,7 @@ export function NewReleaseScreen({ onNavigate, onSubmitRelease, groupId }: NewRe
           </div>
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white shadow-sm border border-[#e6deff] text-[#1d1833] font-label-sm text-[11px]">
             <span className="material-symbols-outlined text-[16px] text-[#431fb9]">account_balance</span>
-            Escrow liquidity available: <span className="font-bold text-[#431fb9]">$2,040.00 USD</span>
+            Available pool balance: <span className="font-bold text-[#431fb9]">$2,040.00 USD</span>
           </div>
         </div>
       </div>
@@ -103,10 +103,10 @@ export function NewReleaseScreen({ onNavigate, onSubmitRelease, groupId }: NewRe
       {/* Header Section */}
       <div className="mb-8 relative">
         <span className="font-label-sm text-[11px] uppercase tracking-widest text-[#431fb9] font-bold">
-          Consensus Disbursement Protocol
+          Procurement &amp; Invoices
         </span>
         <h1 className="font-headline-lg text-3xl sm:text-4xl font-black text-[#1d1833] tracking-tight mt-1">
-          New Release Request
+          Upload Supplier Invoice
         </h1>
         <p className="font-body-md text-[14px] text-[#484554] mt-1.5">
           Batch #DXB-89 • Phone accessories, Dubai run • Submitted by Traveler:{' '}

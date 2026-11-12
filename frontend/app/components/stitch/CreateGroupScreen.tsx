@@ -31,19 +31,31 @@ export function CreateGroupScreen({ onNavigate, onCreateGroup }: CreateGroupScre
 
   return (
     <div className="w-full max-w-[1140px] mx-auto py-2">
+      {/* Back Navigation */}
+      <div className="mb-4">
+        <button
+          type="button"
+          onClick={() => onNavigate('dashboard')}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-[#e6deff] text-[#431fb9] hover:bg-[#f2ebff] text-[13px] font-semibold transition-all shadow-xs cursor-pointer"
+        >
+          <span className="material-symbols-outlined text-[18px]">arrow_back</span>
+          <span>Back to Overview</span>
+        </button>
+      </div>
+
       {/* Page Header & Stepper Track */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8">
         <div>
           <div className="flex items-center gap-2 mb-2">
             <span className="font-label-sm text-[11px] px-2.5 py-0.5 rounded-full bg-[#e7deff] text-[#1f005f] font-semibold tracking-wide uppercase">
-              Group Escrow Architecture
+              Group Pool Architecture
             </span>
             <span className="font-label-sm text-[11px] text-[#797586] flex items-center gap-1">
               <span className="w-1.5 h-1.5 rounded-full bg-[#5b3fd1]"></span> Multi-Party Consensus
             </span>
           </div>
           <h1 className="font-headline-lg text-3xl sm:text-4xl font-black text-[#1d1833] tracking-tight">
-            Create Group Escrow Pool
+            Create Group Pool
           </h1>
           <p className="font-body-md text-[14px] text-[#484554] max-w-xl mt-1">
             Lock shared rules, define target procurement manifests, and invite pooled capital depositors under automated OCR audit consensus.
@@ -101,7 +113,7 @@ export function CreateGroupScreen({ onNavigate, onCreateGroup }: CreateGroupScre
                   {/* Group Name */}
                   <div>
                     <label className="block text-[13px] font-semibold text-[#1d1833] mb-1.5">
-                      Escrow Group Title
+                      Group Trip Title
                     </label>
                     <input
                       type="text"
@@ -152,7 +164,7 @@ export function CreateGroupScreen({ onNavigate, onCreateGroup }: CreateGroupScre
                   {/* Designated Procurement Traveler Card */}
                   <div>
                     <label className="block text-[13px] font-semibold text-[#1d1833] mb-1.5">
-                      Designated Procurement Traveler (Escrow Custodian)
+                      Designated Procurement Traveler
                     </label>
                     <div className="flex items-center justify-between p-3.5 rounded-xl bg-[#f7f1ff] border border-[#e6deff]">
                       <div className="flex items-center gap-3">
@@ -329,7 +341,7 @@ export function CreateGroupScreen({ onNavigate, onCreateGroup }: CreateGroupScre
                 type="submit"
                 className="px-6 py-2.5 rounded-xl bg-[#5b3fd1] hover:bg-[#431fb9] text-white text-[13px] font-bold shadow-md transition-all cursor-pointer"
               >
-                Save &amp; Launch Group Escrow Pool
+                Save &amp; Launch Group Pool
               </button>
             )}
           </div>
@@ -366,7 +378,7 @@ export function CreateGroupScreen({ onNavigate, onCreateGroup }: CreateGroupScre
               <span className="font-bold text-[#431fb9] text-base">${totalTarget}.00</span>
             </div>
             <p className="text-[11px] text-[#484554]">
-              Escrowed into PayPal Sandbox with automatic refund triggers.
+              Protected in the multi-party group pot with automatic refund triggers.
             </p>
           </div>
         </div>

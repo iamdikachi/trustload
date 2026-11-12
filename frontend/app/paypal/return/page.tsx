@@ -44,7 +44,7 @@ function PaypalReturnContent() {
         } else {
           if (isSubscribed) {
             setStatus('error');
-            setErrorMessage(msg || 'Failed to capture PayPal order in sandbox escrow vault.');
+            setErrorMessage(msg || 'Failed to capture PayPal payment.');
           }
         }
       }
@@ -103,10 +103,10 @@ function PaypalReturnContent() {
             </div>
             <div className="space-y-2">
               <h2 className="text-2xl font-bold text-[#1d1833]">
-                Securing Escrow Vault...
+                Confirming Deposit...
               </h2>
               <p className="text-sm text-[#484554] max-w-sm mx-auto">
-                Capturing your authorized payment from PayPal Sandbox and recording the deposit into the 256-bit multi-party vault ledger.
+                Confirming your payment with PayPal and recording the deposit into the multi-party vault ledger.
               </p>
             </div>
             <div className="p-4 rounded-2xl bg-[#f7f1ff] border border-[#e6deff] text-left text-xs space-y-1.5 text-[#484554]">
@@ -134,10 +134,10 @@ function PaypalReturnContent() {
             <div className="space-y-2">
               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-[#dcfce7] text-[#15803d]">
                 <span className="w-2 h-2 rounded-full bg-[#15803d]"></span>
-                PayPal Sandbox Escrow Verified
+                Payment Verified
               </span>
               <h2 className="text-2xl sm:text-3xl font-extrabold text-[#1d1833]">
-                Contribution Locked in Escrow!
+                Contribution Confirmed!
               </h2>
               <p className="text-sm text-[#484554]">
                 Your funds have been deposited into the pool vault. The smart ledger is now synchronized for all group members.
@@ -147,7 +147,7 @@ function PaypalReturnContent() {
             {/* Financial Summary Card */}
             <div className="p-5 rounded-2xl bg-[#f7f1ff] border border-[#e6deff] text-left space-y-3">
               <div className="flex items-center justify-between pb-3 border-b border-[#e6deff]">
-                <span className="text-xs text-[#484554]">Amount Escrowed</span>
+                <span className="text-xs text-[#484554]">Amount Deposited</span>
                 <span className="text-xl font-black text-[#1d1833]">$1,000.00 USD</span>
               </div>
               <div className="text-xs space-y-2 text-[#484554]">
@@ -197,10 +197,10 @@ function PaypalReturnContent() {
 
             <div className="space-y-2">
               <h2 className="text-2xl font-bold text-[#1d1833]">
-                Escrow Capture Notice
+                Payment Notice
               </h2>
               <p className="text-sm text-[#484554]">
-                {errorMessage || 'Unable to complete the PayPal Sandbox escrow capture.'}
+                {errorMessage || 'Unable to complete the payment capture.'}
               </p>
             </div>
 
@@ -235,7 +235,7 @@ export default function PaypalReturnPage() {
         <div className="min-h-screen bg-[#fdf8ff] flex items-center justify-center text-center p-6">
           <div className="space-y-4">
             <div className="w-12 h-12 rounded-full border-4 border-[#5b3fd1] border-t-transparent animate-spin mx-auto"></div>
-            <p className="text-sm text-[#484554] font-medium">Verifying PayPal Sandbox session...</p>
+            <p className="text-sm text-[#484554] font-medium">Verifying PayPal session...</p>
           </div>
         </div>
       }

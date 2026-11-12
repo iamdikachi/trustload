@@ -17,9 +17,8 @@ export function DashboardScreen({
 }: DashboardScreenProps) {
   const [approvedLocal, setApprovedLocal] = useState(isReleaseApproved);
   const [reminderSent, setReminderSent] = useState(false);
-  const [activeChartTab, setActiveChartTab] = useState<'donut' | 'bars'>('donut');
 
-  // Modals state (replaces alerts)
+  // Modals state
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [isDisputeModalOpen, setIsDisputeModalOpen] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
@@ -33,34 +32,9 @@ export function DashboardScreen({
     }
   };
 
-  // Data for Vault Liquidity:
-  // Released: $1,960 (39.2%)
-  // Held in Pot: $2,040 (40.8%)
-  // Remaining Unpaid: $1,000 (20.0%)
-  const totalCap = 5000;
-  const released = 1960;
-  const held = 2040;
-  const unpaid = 1000;
-
-  // Donut SVG circumference math:
-  // r = 54, circumference = 2 * PI * 54 = ~339.29
-  const radius = 54;
-  const circ = 2 * Math.PI * radius;
-  const pctReleased = released / totalCap; // 0.392
-  const pctHeld = held / totalCap; // 0.408
-  const pctUnpaid = unpaid / totalCap; // 0.200
-
-  const dashReleased = pctReleased * circ;
-  const dashHeld = pctHeld * circ;
-  const dashUnpaid = pctUnpaid * circ;
-
-  const offsetReleased = 0;
-  const offsetHeld = -dashReleased;
-  const offsetUnpaid = -(dashReleased + dashHeld);
-
   return (
     <div className="w-full space-y-6">
-      {/* 1. Header & Actions */}
+      {/* 1. Header & Quick Primary Actions */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2 border-b border-[#e6deff]/60">
         <div>
           <div className="flex items-center gap-2 flex-wrap">
@@ -69,251 +43,232 @@ export function DashboardScreen({
             </h1>
             <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#ece4ff] text-[#431fb9] text-[11px] font-bold uppercase tracking-wider">
               <span className="w-1.5 h-1.5 rounded-full bg-[#431fb9] animate-pulse" />
-              Active Pool
-            </span>
-            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#e7deff] text-[#1f005f] text-[11px] font-medium">
-              <span className="material-symbols-outlined text-[13px]">flight_takeoff</span>
-              Chidi O.
+              Active Trip
             </span>
           </div>
-          <p className="text-[12px] text-[#797586] mt-1 flex items-center gap-2">
-            <span>Vault #DXB-9942</span>
+          <p className="text-[12px] text-[#797586] mt-1 flex items-center gap-2 flex-wrap">
+            <span>Traveler: <strong>Chidi Okonkwo</strong></span>
             <span>•</span>
-            <span>Initiated May 14, 2026</span>
+            <span>Batch #DXB-9942</span>
             <span>•</span>
-            <span className="font-semibold text-[#431fb9]">Consensus Quorum: 3 of 5</span>
+            <span className="font-semibold text-[#431fb9]">Consensus Quorum: 3 of 5 votes required</span>
           </p>
         </div>
 
-        {/* Action Buttons */}
+        {/* Clear Primary Navigation Actions */}
         <div className="flex items-center gap-2 flex-wrap">
           <button
             type="button"
-            onClick={() => onNavigate('ledger')}
-            className="px-3.5 py-2 rounded-xl bg-white hover:bg-[#f2ebff] text-[#1d1833] text-[13px] font-semibold border border-[#e6deff] shadow-xs flex items-center gap-1.5 cursor-pointer transition-colors"
+            onClick={() => onNavigate('pay-contribution')}
+            className="px-4 py-2.5 rounded-xl bg-[#5b3fd1] hover:bg-[#431fb9] text-white text-[13px] font-bold shadow-sm flex items-center gap-1.5 cursor-pointer transition-all active:scale-[0.98]"
           >
-            <span className="material-symbols-outlined text-[16px] text-[#797586]">description</span>
-            <span>Audit Report</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setIsInviteModalOpen(true)}
-            className="px-3.5 py-2 rounded-xl bg-[#f2ebff] hover:bg-[#e6deff] text-[#431fb9] text-[13px] font-semibold flex items-center gap-1.5 cursor-pointer transition-colors"
-          >
-            <span className="material-symbols-outlined text-[16px]">group_add</span>
-            <span>Invite</span>
+            <span className="material-symbols-outlined text-[17px]">payments</span>
+            <span>Pay Share ($1,000)</span>
           </button>
           <button
             type="button"
             onClick={() => onNavigate('new-release')}
-            className="px-4 py-2 rounded-xl bg-[#5b3fd1] hover:bg-[#431fb9] text-white text-[13px] font-bold shadow-xs flex items-center gap-1.5 cursor-pointer transition-colors"
+            className="px-3.5 py-2.5 rounded-xl bg-white hover:bg-[#f2ebff] text-[#1d1833] text-[13px] font-semibold border border-[#e6deff] shadow-xs flex items-center gap-1.5 cursor-pointer transition-colors"
           >
-            <span className="material-symbols-outlined text-[16px]">add_circle</span>
-            <span>New Release</span>
+            <span className="material-symbols-outlined text-[17px] text-[#5b3fd1]">receipt_long</span>
+            <span>Upload Invoice</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsInviteModalOpen(true)}
+            className="px-3 py-2.5 rounded-xl bg-[#f2ebff] hover:bg-[#e6deff] text-[#431fb9] text-[13px] font-semibold flex items-center gap-1.5 cursor-pointer transition-colors"
+            title="Invite new group members"
+          >
+            <span className="material-symbols-outlined text-[17px]">group_add</span>
+            <span>Invite</span>
           </button>
         </div>
       </div>
 
-      {/* 2. Visual Liquidity Analytics (Hero Charts) */}
-      <div className="rounded-2xl bg-white border border-[#e6deff] p-5 shadow-xs">
-        <div className="flex flex-col lg:flex-row items-center justify-between gap-6">
-          {/* Left Column: Big Key Metric & Status Chips */}
-          <div className="flex-1 min-w-[260px] space-y-3">
-            <div className="flex items-center gap-2">
-              <span className="text-[11px] font-bold uppercase tracking-widest text-[#797586]">
-                Vault Balance
-              </span>
-              <span className="px-2 py-0.5 rounded-full bg-[#dcfce7] text-[#15803d] text-[10px] font-bold flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#15803d] animate-pulse" />
-                Live Escrow
-              </span>
+      {/* 2. Unmissable "Next Action" Callout Banner for New Users */}
+      {!approvedLocal ? (
+        <div className="bg-[#f7f1ff] border-2 border-[#5b3fd1] rounded-2xl p-5 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex items-start sm:items-center gap-3.5">
+            <div className="w-11 h-11 rounded-xl bg-[#5b3fd1] text-white flex items-center justify-center shrink-0 shadow-xs">
+              <span className="material-symbols-outlined text-[24px]">how_to_vote</span>
             </div>
-
-            <div className="flex items-baseline gap-2">
-              <span className="font-['Bricolage_Grotesque',sans-serif] text-4xl sm:text-5xl font-bold text-[#1d1833] tracking-tight">
-                $2,040
-              </span>
-              <span className="text-sm font-semibold text-[#633fce]">held in the pot</span>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="px-2 py-0.5 rounded-full bg-[#ffdad6] text-[#93000a] text-[10px] font-bold uppercase tracking-wider">
+                  Action Required
+                </span>
+                <span className="text-[12px] font-semibold text-[#431fb9]">
+                  2 of 3 votes collected
+                </span>
+              </div>
+              <h3 className="text-base font-bold text-[#1d1833] mt-0.5">
+                Dubai Gadget Wholesale · AED 6,100 ($1,661 USD)
+              </h3>
+              <p className="text-[12px] text-[#484554] mt-0.5">
+                Traveler Chidi submitted this purchase claim. Your approval is needed to disburse funds.
+              </p>
             </div>
+          </div>
 
-            <p className="text-[13px] text-[#484554] max-w-sm leading-normal">
-              <strong className="text-[#1d1833]">$4,000</strong> paid in of{' '}
-              <strong className="text-[#1d1833]">$5,000</strong> target cap.{' '}
-              <strong className="text-[#431fb9]">$1,960</strong> released against verified invoices.
+          <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+            <button
+              type="button"
+              onClick={() => onNavigate('review-approve')}
+              className="px-4 py-2.5 rounded-xl bg-[#5b3fd1] hover:bg-[#431fb9] text-white text-[13px] font-bold shadow-md transition-all flex items-center gap-1.5 cursor-pointer active:scale-[0.98]"
+            >
+              <span>Review &amp; Vote</span>
+              <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="bg-[#dcfce7] border border-[#22c55e]/50 rounded-2xl p-4 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <span className="material-symbols-outlined text-[#15803d] text-[26px]">check_circle</span>
+            <div>
+              <span className="text-[13px] font-bold text-[#15803d]">Consensus Reached &amp; Release Approved!</span>
+              <p className="text-[11px] text-[#166534]">
+                3 of 3 votes collected. $1,661 USD has been authorized for Dubai Gadget Wholesale.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => onNavigate('ledger')}
+            className="px-3 py-1.5 rounded-lg bg-white border border-[#22c55e]/40 text-[#15803d] text-[12px] font-bold hover:bg-emerald-50 cursor-pointer"
+          >
+            View in Ledger →
+          </button>
+        </div>
+      )}
+
+      {/* 3. Three High-Level Financial Metric Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {/* Card 1: Vault Balance */}
+        <div className="bg-white rounded-2xl p-5 border border-[#e6deff] shadow-xs flex flex-col justify-between">
+          <div className="flex items-center justify-between text-[#797586]">
+            <span className="text-[11px] font-bold uppercase tracking-wider">Pot Vault Balance</span>
+            <div className="w-8 h-8 rounded-lg bg-[#f2ebff] text-[#5b3fd1] flex items-center justify-center">
+              <span className="material-symbols-outlined text-[18px]">account_balance_wallet</span>
+            </div>
+          </div>
+          <div className="mt-2">
+            <div className="text-3xl font-extrabold text-[#1d1833] tracking-tight">
+              $2,040.00
+            </div>
+            <p className="text-[11px] text-[#484554] mt-1">
+              Available in group pot for upcoming purchases
             </p>
+          </div>
+        </div>
 
-            {/* Quick KPI Badges */}
-            <div className="flex items-center gap-2 pt-1 flex-wrap text-[11px]">
-              <span className="px-2.5 py-1 rounded-lg bg-[#f7f1ff] border border-[#e6deff] font-medium text-[#1d1833]">
-                🎯 Cap: <strong>$5,000 USD</strong>
-              </span>
-              <span className="px-2.5 py-1 rounded-lg bg-[#f7f1ff] border border-[#e6deff] font-medium text-[#1d1833]">
-                👥 Quorum: <strong>3 of 5 (60%)</strong>
-              </span>
-              <span className="px-2.5 py-1 rounded-lg bg-[#f7f1ff] border border-[#e6deff] font-medium text-[#15803d] flex items-center gap-1">
-                <span className="material-symbols-outlined text-[13px]">verified_user</span>
-                Secured
-              </span>
+        {/* Card 2: Pledges Collected */}
+        <div className="bg-white rounded-2xl p-5 border border-[#e6deff] shadow-xs flex flex-col justify-between">
+          <div className="flex items-center justify-between text-[#797586]">
+            <span className="text-[11px] font-bold uppercase tracking-wider">Pledges Collected</span>
+            <div className="w-8 h-8 rounded-lg bg-[#dcfce7] text-[#15803d] flex items-center justify-center">
+              <span className="material-symbols-outlined text-[18px]">group</span>
             </div>
           </div>
-
-          {/* Middle Column: SVG Donut Allocation Chart */}
-          <div className="flex items-center gap-6 px-4 py-2 border-y lg:border-y-0 lg:border-x border-[#e6deff]/70">
-            <div className="relative w-36 h-36 flex items-center justify-center shrink-0">
-              <svg className="w-full h-full -rotate-90 transform" viewBox="0 0 128 128">
-                {/* Background Ring */}
-                <circle
-                  cx="64"
-                  cy="64"
-                  r={radius}
-                  stroke="#f2ebff"
-                  strokeWidth="14"
-                  fill="none"
-                />
-                {/* Released Segment: Purple */}
-                <circle
-                  cx="64"
-                  cy="64"
-                  r={radius}
-                  stroke="#431fb9"
-                  strokeWidth="14"
-                  strokeDasharray={`${dashReleased} ${circ}`}
-                  strokeDashoffset={offsetReleased}
-                  fill="none"
-                  strokeLinecap="round"
-                />
-                {/* Held in Pot: Violet */}
-                <circle
-                  cx="64"
-                  cy="64"
-                  r={radius}
-                  stroke="#7c5be8"
-                  strokeWidth="14"
-                  strokeDasharray={`${dashHeld} ${circ}`}
-                  strokeDashoffset={offsetHeld}
-                  fill="none"
-                  strokeLinecap="round"
-                />
-                {/* Unpaid: Light Lavender */}
-                <circle
-                  cx="64"
-                  cy="64"
-                  r={radius}
-                  stroke="#e6deff"
-                  strokeWidth="14"
-                  strokeDasharray={`${dashUnpaid} ${circ}`}
-                  strokeDashoffset={offsetUnpaid}
-                  fill="none"
-                />
-              </svg>
-
-              {/* Center Donut Label */}
-              <div className="absolute inset-0 flex flex-col items-center justify-center text-center select-none">
-                <span className="font-['Bricolage_Grotesque',sans-serif] text-base font-bold text-[#1d1833] leading-none">
-                  $5,000
-                </span>
-                <span className="text-[9px] uppercase tracking-wider text-[#797586] font-semibold mt-0.5">
-                  Pool Total
-                </span>
-              </div>
+          <div className="mt-2">
+            <div className="text-3xl font-extrabold text-[#1d1833] tracking-tight">
+              $4,000 / $5,000
             </div>
+            <p className="text-[11px] text-[#484554] mt-1">
+              4 of 5 member seats funded (80% collected)
+            </p>
+          </div>
+        </div>
 
-            {/* Donut Legend */}
-            <div className="flex flex-col gap-2 text-[12px]">
-              <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-[#7c5be8]" />
-                <span className="text-[#484554]">Held in Pot:</span>
-                <strong className="text-[#1d1833] font-mono">$2,040</strong>
-                <span className="text-[10px] text-[#797586] font-semibold">(40.8%)</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-[#431fb9]" />
-                <span className="text-[#484554]">Released:</span>
-                <strong className="text-[#1d1833] font-mono">$1,960</strong>
-                <span className="text-[10px] text-[#797586] font-semibold">(39.2%)</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-[#e6deff]" />
-                <span className="text-[#484554]">Unpaid:</span>
-                <strong className="text-[#797586] font-mono">$1,000</strong>
-                <span className="text-[10px] text-[#797586] font-semibold">(20.0%)</span>
-              </div>
+        {/* Card 3: Disbursed to Vendors */}
+        <div className="bg-white rounded-2xl p-5 border border-[#e6deff] shadow-xs flex flex-col justify-between">
+          <div className="flex items-center justify-between text-[#797586]">
+            <span className="text-[11px] font-bold uppercase tracking-wider">Disbursed to Vendors</span>
+            <div className="w-8 h-8 rounded-lg bg-[#ece4ff] text-[#431fb9] flex items-center justify-center">
+              <span className="material-symbols-outlined text-[18px]">shopping_bag</span>
             </div>
           </div>
-
-          {/* Right Column: Mini Cashflow Bar Chart Visualizer */}
-          <div className="w-full lg:w-64 space-y-2.5 bg-[#fdf8ff] p-3.5 rounded-xl border border-[#e6deff]/60">
-            <div className="flex items-center justify-between text-[11px] font-semibold text-[#1d1833]">
-              <span>Funding &amp; Payout Pace</span>
-              <span className="text-[#431fb9] font-bold">80% Funded</span>
+          <div className="mt-2">
+            <div className="text-3xl font-extrabold text-[#1d1833] tracking-tight">
+              $1,960.00
             </div>
-
-            {/* Target vs Deposited Bar */}
-            <div className="space-y-1">
-              <div className="flex justify-between text-[10px] text-[#797586]">
-                <span>Pledges Deposited</span>
-                <span>$4,000 / $5,000</span>
-              </div>
-              <div className="w-full h-2 rounded-full bg-zinc-100 overflow-hidden">
-                <div className="h-full bg-[#5b3fd1] rounded-full" style={{ width: '80%' }} />
-              </div>
-            </div>
-
-            {/* Approved vs Disbursed Bar */}
-            <div className="space-y-1">
-              <div className="flex justify-between text-[10px] text-[#797586]">
-                <span>Pledged Funds Disbursed</span>
-                <span>$1,960 / $4,000</span>
-              </div>
-              <div className="w-full h-2 rounded-full bg-zinc-100 overflow-hidden">
-                <div className="h-full bg-[#15803d] rounded-full" style={{ width: '49%' }} />
-              </div>
-            </div>
-
-            <p className="text-[10px] text-[#797586] leading-tight pt-1">
-              🔒 PayPal multi-party ledger auto-reconciled 2m ago.
+            <p className="text-[11px] text-[#484554] mt-1">
+              Paid out against 1 approved supplier invoice
             </p>
           </div>
         </div>
       </div>
 
-      {/* 3. Main Grid: Active Release with AI Visual Manifest vs. Member Contributions */}
+      {/* 4. Single Clean Visual Liquidity Bar */}
+      <div className="bg-white rounded-2xl p-5 border border-[#e6deff] shadow-xs space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[12px]">
+          <span className="font-bold text-[#1d1833]">Total Pool Allocation: $5,000.00 USD</span>
+          <span className="text-[11px] text-[#797586]">
+            Target Cap: <strong>$5,000</strong> • Consensus Threshold: <strong>60% (3 votes)</strong>
+          </span>
+        </div>
+
+        {/* Segmented Bar */}
+        <div className="w-full h-3.5 bg-[#f2ebff] rounded-full overflow-hidden flex p-0.5 gap-1">
+          <div className="h-full bg-[#431fb9] rounded-l-full" style={{ width: '39.2%' }} title="Released ($1,960.00)" />
+          <div className="h-full bg-[#7c5be8]" style={{ width: '40.8%' }} title="Held in Pot ($2,040.00)" />
+          <div className="h-full bg-[#e6deff] rounded-r-full" style={{ width: '20.0%' }} title="Pending ($1,000.00)" />
+        </div>
+
+        {/* Clean Legend */}
+        <div className="flex items-center justify-between gap-3 text-[11px] text-[#484554] pt-1 flex-wrap">
+          <div className="flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-[#431fb9]" />
+            <span>Released: <strong>$1,960.00 (39.2%)</strong></span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-[#7c5be8]" />
+            <span>Held in Pot: <strong>$2,040.00 (40.8%)</strong></span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-[#e6deff]" />
+            <span>Unpaid Pledges: <strong>$1,000.00 (20.0%)</strong></span>
+          </div>
+        </div>
+      </div>
+
+      {/* 5. Main 2-Column Split: Active Invoices vs. Member Contributions */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* LEFT COLUMN: Active Release Claim & AI Findings (7 cols) */}
+        {/* LEFT COLUMN: Purchases & Releases (7 cols) */}
         <div className="lg:col-span-7 space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <h2 className="font-['Bricolage_Grotesque',sans-serif] text-lg font-bold text-[#1d1833]">
-                Release Claim Under Review
+                Purchases &amp; Release Claims
               </h2>
               <span className="px-2 py-0.5 rounded-full bg-[#ffdad6] text-[#93000a] text-[10px] font-bold">
-                {approvedLocal ? 'Consensus Approved' : '1 Action Required'}
+                {approvedLocal ? '0 Pending' : '1 Pending'}
               </span>
             </div>
-            <span className="text-[11px] font-semibold text-[#5b3fd1] flex items-center gap-1 bg-[#f2ebff] px-2 py-0.5 rounded-full">
-              <span className="material-symbols-outlined text-[14px]">auto_awesome</span>
-              AI Audit v3.4
-            </span>
+            <button
+              type="button"
+              onClick={() => onNavigate('review-approve')}
+              className="text-[12px] font-bold text-[#5b3fd1] hover:underline flex items-center gap-0.5 cursor-pointer bg-transparent border-0"
+            >
+              <span>View details</span>
+              <span className="material-symbols-outlined text-[14px]">arrow_forward</span>
+            </button>
           </div>
 
-          {/* Release Card */}
+          {/* Active Claim Card */}
           <div className="rounded-2xl bg-white border border-[#e6deff] p-5 shadow-xs space-y-4">
-            {/* Vendor & Amount Header */}
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-start gap-3">
                 <div className="w-10 h-10 rounded-xl bg-[#f2ebff] text-[#431fb9] flex items-center justify-center shrink-0">
                   <span className="material-symbols-outlined text-[22px]">storefront</span>
                 </div>
                 <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-['Bricolage_Grotesque',sans-serif] font-bold text-base text-[#1d1833]">
-                      Dubai Gadget Wholesale
-                    </h3>
-                    <span className="px-2 py-0.2 rounded-full bg-zinc-100 text-[#484554] text-[10px] font-semibold">
-                      #DGW-7741
-                    </span>
-                  </div>
-                  <p className="text-[12px] text-[#797586]">Submitted by traveler Chidi O. • Deira Branch</p>
+                  <h3 className="font-bold text-base text-[#1d1833]">
+                    Dubai Gadget Wholesale
+                  </h3>
+                  <p className="text-[12px] text-[#797586]">
+                    Submitted by traveler Chidi O. • Invoice #DGW-7741
+                  </p>
                 </div>
               </div>
 
@@ -325,84 +280,48 @@ export function DashboardScreen({
               </div>
             </div>
 
-            {/* VISUAL CHART: Manifest vs Invoice AI Match Graph (Replaces Walls of Text) */}
-            <div className="rounded-xl bg-[#f7f1ff] p-3.5 border border-[#e6deff]/70 space-y-3">
-              <div className="flex items-center justify-between text-[11px]">
-                <span className="font-bold text-[#1d1833] flex items-center gap-1">
-                  <span className="material-symbols-outlined text-[14px] text-[#5b3fd1]">analytics</span>
-                  AI Manifest Comparison Chart
+            {/* AI Audit Findings Summary */}
+            <div className="rounded-xl bg-[#f7f1ff] p-3.5 border border-[#e6deff] space-y-2 text-[12px]">
+              <div className="flex items-center justify-between text-[11px] font-bold text-[#5b3fd1]">
+                <span className="flex items-center gap-1">
+                  <span className="material-symbols-outlined text-[14px]">auto_awesome</span>
+                  AI Audit Findings
                 </span>
                 <span className="text-[#15803d] font-semibold bg-[#dcfce7] px-2 py-0.2 rounded-full text-[10px]">
-                  98.4% OCR Confidence
+                  98.4% Confidence
                 </span>
               </div>
-
-              {/* Visual Quantity Bar 1: Phone Cases (Discrepancy) */}
-              <div className="space-y-1 bg-white p-2.5 rounded-lg border border-amber-200/80">
-                <div className="flex items-center justify-between text-[11px]">
-                  <span className="font-bold text-amber-900 flex items-center gap-1">
-                    <span className="material-symbols-outlined text-[14px] text-amber-600">warning</span>
-                    Phone Cases (#CASE-MAG-SLIM)
-                  </span>
-                  <span className="font-bold text-amber-800 text-[10px] bg-amber-50 px-1.5 py-0.5 rounded">
-                    +100 Over Order (+20%)
-                  </span>
-                </div>
-
-                {/* Progress Comparison */}
-                <div className="grid grid-cols-12 gap-2 items-center text-[10px] text-[#797586] pt-0.5">
-                  <span className="col-span-3 text-[10px]">Ordered: 500</span>
-                  <div className="col-span-6 h-2 rounded-full bg-zinc-100 overflow-hidden relative">
-                    <div className="h-full bg-emerald-500" style={{ width: '83%' }} title="Ordered 500" />
-                    <div className="absolute right-0 top-0 bottom-0 bg-amber-500" style={{ width: '17%' }} title="Excess 100" />
-                  </div>
-                  <span className="col-span-3 text-right font-bold text-amber-900">Billed: 600</span>
-                </div>
-              </div>
-
-              {/* Visual Quantity Bar 2: Tempered Glass (100% Cleared) */}
-              <div className="space-y-1 bg-white p-2.5 rounded-lg border border-emerald-200/80">
-                <div className="flex items-center justify-between text-[11px]">
-                  <span className="font-bold text-emerald-900 flex items-center gap-1">
-                    <span className="material-symbols-outlined text-[14px] text-emerald-600">check_circle</span>
-                    Tempered Glass (1,200 units) &amp; USB-C Cables (800 units)
-                  </span>
-                  <span className="font-bold text-emerald-700 text-[10px] bg-emerald-50 px-1.5 py-0.5 rounded">
-                    100% Match
-                  </span>
-                </div>
-                <div className="h-1.5 rounded-full bg-emerald-100 overflow-hidden">
-                  <div className="h-full bg-emerald-600 rounded-full" style={{ width: '100%' }} />
-                </div>
-              </div>
-
-              {/* Arithmetic Summary Note */}
-              <div className="text-[11px] text-zinc-600 bg-white/70 p-2 rounded-lg flex items-center justify-between">
-                <span>
-                  <strong>Math Check:</strong> Line items add up to AED 6,340 vs AED 6,100 invoice total.
-                </span>
-                <span className="font-semibold text-zinc-500 text-[10px]">Cash discount (-AED 240)</span>
-              </div>
+              <ul className="space-y-1.5 text-[11px] text-[#484554]">
+                <li className="flex items-start gap-1.5">
+                  <span className="material-symbols-outlined text-amber-600 text-[15px] shrink-0 mt-0.5">warning</span>
+                  <span><strong>Quantity Mismatch:</strong> 600 phone cases billed vs. 500 in group order manifest (+100 extra).</span>
+                </li>
+                <li className="flex items-start gap-1.5">
+                  <span className="material-symbols-outlined text-[#15803d] text-[15px] shrink-0 mt-0.5">check_circle</span>
+                  <span>Tempered glass (1,200 units) and USB-C cables (800 units) strictly match specifications.</span>
+                </li>
+              </ul>
             </div>
 
-            {/* Quorum Votes Row */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1 border-t border-zinc-100">
+            {/* Quorum Votes Row & Decision Actions */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 border-t border-zinc-100">
               <div className="flex items-center gap-2">
                 <span className="text-[12px] font-bold text-[#1d1833]">Quorum:</span>
                 <span className="text-[12px] font-bold text-[#431fb9]">
                   {approvedLocal ? '3 of 3 Votes (Consensus Reached)' : '2 of 3 Required Votes'}
                 </span>
                 <div className="flex items-center gap-1 ml-2">
-                  <span className="w-6 h-6 rounded-full bg-[#5b3fd1] text-white text-[10px] font-bold flex items-center justify-center">
+                  <span className="w-6 h-6 rounded-full bg-[#5b3fd1] text-white text-[10px] font-bold flex items-center justify-center" title="Amaka O. (Approved)">
                     AO
                   </span>
-                  <span className="w-6 h-6 rounded-full bg-[#633fce] text-white text-[10px] font-bold flex items-center justify-center">
+                  <span className="w-6 h-6 rounded-full bg-[#633fce] text-white text-[10px] font-bold flex items-center justify-center" title="Tunde A. (Approved)">
                     TA
                   </span>
                   <span
                     className={`w-6 h-6 rounded-full text-[10px] font-bold flex items-center justify-center ${
                       approvedLocal ? 'bg-emerald-600 text-white' : 'bg-amber-100 text-amber-800 animate-pulse'
                     }`}
+                    title={approvedLocal ? 'Chidi O. (Approved)' : 'Your Vote Pending'}
                   >
                     YOU
                   </span>
@@ -434,13 +353,13 @@ export function DashboardScreen({
             </div>
           </div>
 
-          {/* Historical Settled Payout (Compact) */}
+          {/* Settled Purchase Summary Card */}
           <div className="rounded-xl bg-white border border-[#e6deff] p-3.5 flex items-center justify-between text-[12px]">
             <div className="flex items-center gap-2.5">
               <span className="material-symbols-outlined text-[20px] text-emerald-600">verified</span>
               <div>
                 <span className="font-bold text-[#1d1833]">Shenzhen Brightline Co.</span>
-                <span className="text-[11px] text-[#797586] ml-2">May 16 via PayPal • Ref: PP-PO-8812</span>
+                <span className="text-[11px] text-[#797586] ml-2">Cleared May 16 • Ref: PP-PO-8812</span>
               </div>
             </div>
             <div className="font-bold text-[#1d1833] font-mono">
@@ -449,45 +368,40 @@ export function DashboardScreen({
           </div>
         </div>
 
-        {/* RIGHT COLUMN: Member Funding Gauge & Roster (5 cols) */}
+        {/* RIGHT COLUMN: Member Contributions & Pledges (5 cols) */}
         <div className="lg:col-span-5 space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="font-['Bricolage_Grotesque',sans-serif] text-lg font-bold text-[#1d1833]">
               Member Contributions
             </h2>
-            <span className="text-[12px] font-bold text-[#431fb9]">4 of 5 Paid ($4k / $5k)</span>
+            <span className="text-[12px] font-bold text-[#431fb9]">4 of 5 Paid ($4,000)</span>
           </div>
 
-          {/* Member Roster Card */}
           <div className="rounded-2xl bg-white border border-[#e6deff] p-4 shadow-xs space-y-3">
-            {/* Visual 5-Seat Funding Bar Chart */}
+            {/* 5-Seat Progress Visualization */}
             <div className="space-y-1.5 bg-[#fdf8ff] p-3 rounded-xl border border-[#e6deff]/60">
               <div className="flex justify-between text-[11px] font-semibold text-[#1d1833]">
-                <span>Pool Seat Allocation</span>
-                <span className="text-[#15803d]">80% Cleared</span>
+                <span>Member Seats Pledged</span>
+                <span className="text-[#15803d]">80% Funded</span>
               </div>
-              <div className="grid grid-cols-5 gap-1.5 h-3">
-                <div className="bg-emerald-500 rounded-xs" title="Amaka: $1,000 Paid" />
-                <div className="bg-emerald-500 rounded-xs" title="Tunde: $1,000 Paid" />
-                <div className="bg-emerald-500 rounded-xs" title="Ngozi: $1,000 Paid" />
-                <div className="bg-emerald-500 rounded-xs" title="Ibrahim: $1,000 Paid" />
-                <div className="bg-amber-300 rounded-xs animate-pulse" title="Bola: $1,000 Pending" />
-              </div>
-              <div className="flex justify-between text-[10px] text-[#797586] pt-0.5">
-                <span>4 Seats Active ($4,000)</span>
-                <span>1 Pending ($1,000)</span>
+              <div className="grid grid-cols-5 gap-1.5 h-2.5">
+                <div className="bg-emerald-500 rounded-xs" title="Amaka O.: $1,000 Paid" />
+                <div className="bg-emerald-500 rounded-xs" title="Tunde A.: $1,000 Paid" />
+                <div className="bg-emerald-500 rounded-xs" title="Ngozi E.: $1,000 Paid" />
+                <div className="bg-emerald-500 rounded-xs" title="Ibrahim M.: $1,000 Paid" />
+                <div className="bg-amber-300 rounded-xs animate-pulse" title="Bola K.: $1,000 Pending" />
               </div>
             </div>
 
-            {/* Compact Member Rows */}
+            {/* Member List */}
             <div className="divide-y divide-zinc-100 text-[12px]">
               {[
-                { name: 'Amaka O.', method: 'Chase Wire', amount: '$1,000', status: 'paid' },
-                { name: 'Tunde A.', method: 'Apple Pay', amount: '$1,000', status: 'paid' },
-                { name: 'Ngozi E.', method: 'Debit Card', amount: '$1,000', status: 'paid' },
-                { name: 'Ibrahim M.', method: 'ACH Transfer', amount: '$1,000', status: 'paid' },
+                { name: 'Amaka O.', method: 'Chase Wire', amount: '$1,000.00', status: 'paid' },
+                { name: 'Tunde A.', method: 'Apple Pay', amount: '$1,000.00', status: 'paid' },
+                { name: 'Ngozi E.', method: 'Debit Card', amount: '$1,000.00', status: 'paid' },
+                { name: 'Ibrahim M.', method: 'ACH Transfer', amount: '$1,000.00', status: 'paid' },
               ].map((m, idx) => (
-                <div key={idx} className="py-2 flex items-center justify-between">
+                <div key={idx} className="py-2.5 flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span className="w-7 h-7 rounded-full bg-[#f2ebff] text-[#5b3fd1] font-bold text-[11px] flex items-center justify-center">
                       {m.name.slice(0, 2).toUpperCase()}
@@ -504,8 +418,8 @@ export function DashboardScreen({
                 </div>
               ))}
 
-              {/* Pending Seat: Bola K. */}
-              <div className="pt-2 flex items-center justify-between bg-amber-50/50 p-2 rounded-lg mt-1 border border-amber-200/60">
+              {/* Pending Member Seat: Bola K. */}
+              <div className="py-2.5 flex items-center justify-between bg-amber-50/50 p-2 rounded-lg mt-1 border border-amber-200/60">
                 <div className="flex items-center gap-2">
                   <span className="w-7 h-7 rounded-full bg-amber-100 text-amber-800 font-bold text-[11px] flex items-center justify-center">
                     BK
@@ -519,112 +433,58 @@ export function DashboardScreen({
                 <div className="flex items-center gap-1.5">
                   <button
                     type="button"
-                    onClick={() => onNavigate('pay-contribution')}
-                    className="px-2 py-1 rounded-md bg-[#5b3fd1] text-white text-[11px] font-bold hover:bg-[#431fb9] cursor-pointer"
-                  >
-                    Pay ($1k)
-                  </button>
-                  <button
-                    type="button"
                     onClick={() => {
                       setReminderSent(true);
                       setTimeout(() => setReminderSent(false), 3000);
                     }}
-                    className="px-2 py-1 rounded-md bg-white border border-[#e6deff] text-[#431fb9] text-[11px] font-bold hover:bg-[#f2ebff] cursor-pointer"
+                    className="px-2.5 py-1 rounded-md bg-white border border-[#e6deff] text-[#431fb9] text-[11px] font-bold hover:bg-[#f2ebff] cursor-pointer"
                   >
-                    {reminderSent ? 'Sent!' : 'Nudge'}
+                    {reminderSent ? 'Nudge Sent ✓' : 'Nudge'}
                   </button>
+                  <span className="font-mono font-bold text-[#1d1833] text-[11px]">$1,000</span>
                 </div>
               </div>
             </div>
 
-            {/* Security Note */}
-            <div className="p-2.5 rounded-xl bg-[#f2ebff] text-[11px] text-[#431fb9] flex items-center gap-2">
-              <span className="material-symbols-outlined text-[16px] shrink-0">shield</span>
-              <span>Protected by automated PayPal sandbox consensus escrow.</span>
-            </div>
+            {/* Direct Pay Action */}
+            <button
+              type="button"
+              onClick={() => onNavigate('pay-contribution')}
+              className="w-full mt-2 py-2.5 rounded-xl bg-[#5b3fd1] hover:bg-[#431fb9] text-white text-[12px] font-bold shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+            >
+              <span className="material-symbols-outlined text-[16px]">payments</span>
+              <span>Pay Your $1,000 Share</span>
+            </button>
           </div>
         </div>
       </div>
 
-      {/* 4. Recent Activity Ledger Table */}
-      <div className="rounded-2xl bg-white border border-[#e6deff] p-5 shadow-xs space-y-3">
-        <div className="flex items-center justify-between">
+      {/* 6. Transparent Ledger Audit Callout (Clean link instead of congested table) */}
+      <div className="bg-white rounded-2xl p-5 border border-[#e6deff] shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-[#ece4ff] text-[#431fb9] flex items-center justify-center shrink-0">
+            <span className="material-symbols-outlined text-[20px]">account_balance</span>
+          </div>
           <div>
-            <h3 className="font-['Bricolage_Grotesque',sans-serif] text-base font-bold text-[#1d1833]">
-              Recent Ledger Activity
-            </h3>
-            <p className="text-[11px] text-[#797586]">Cryptographic audit trail for Dubai run</p>
+            <h4 className="font-bold text-[14px] text-[#1d1833]">
+              Transparent Transaction Ledger
+            </h4>
+            <p className="text-[12px] text-[#797586]">
+              6 verified records logged. Every deposit, payout, and currency exchange is permanently anchored to the group ledger.
+            </p>
           </div>
-          <button
-            type="button"
-            onClick={() => onNavigate('ledger')}
-            className="text-[12px] font-bold text-[#5b3fd1] hover:underline cursor-pointer flex items-center gap-1"
-          >
-            <span>Full Ledger</span>
-            <span className="material-symbols-outlined text-[15px]">arrow_forward</span>
-          </button>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-[12px]">
-            <thead>
-              <tr className="bg-[#f7f1ff] text-[#797586] text-[10px] uppercase tracking-wider font-semibold">
-                <th className="py-2.5 px-3 rounded-l-lg">Time</th>
-                <th className="py-2.5 px-3">Transaction</th>
-                <th className="py-2.5 px-3">Entity</th>
-                <th className="py-2.5 px-3">Status</th>
-                <th className="py-2.5 px-3 text-right rounded-r-lg">Amount</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-100">
-              <tr className="hover:bg-[#fdf8ff]">
-                <td className="py-2.5 px-3 text-[#797586]">May 17, 10:22 AM</td>
-                <td className="py-2.5 px-3 font-semibold text-[#1d1833]">Release Claim #REQ-118</td>
-                <td className="py-2.5 px-3">Dubai Gadget Wholesale</td>
-                <td className="py-2.5 px-3">
-                  <span
-                    className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
-                      approvedLocal ? 'bg-[#dcfce7] text-[#15803d]' : 'bg-[#fef3c7] text-[#b45309]'
-                    }`}
-                  >
-                    {approvedLocal ? 'Consensus Approved' : 'Pending Vote (2/3)'}
-                  </span>
-                </td>
-                <td className="py-2.5 px-3 text-right font-bold text-amber-700 font-mono">
-                  ($1,661.00)
-                </td>
-              </tr>
-              <tr className="hover:bg-[#fdf8ff]">
-                <td className="py-2.5 px-3 text-[#797586]">May 16, 04:15 PM</td>
-                <td className="py-2.5 px-3 font-semibold text-[#1d1833]">Escrow Payout</td>
-                <td className="py-2.5 px-3">Shenzhen Brightline Co.</td>
-                <td className="py-2.5 px-3">
-                  <span className="px-2 py-0.5 rounded-full bg-[#dcfce7] text-[#15803d] text-[10px] font-semibold">
-                    Paid via PayPal
-                  </span>
-                </td>
-                <td className="py-2.5 px-3 text-right font-bold text-[#431fb9] font-mono">
-                  ($1,960.00)
-                </td>
-              </tr>
-              <tr className="hover:bg-[#fdf8ff]">
-                <td className="py-2.5 px-3 text-[#797586]">May 15, 08:30 AM</td>
-                <td className="py-2.5 px-3 font-semibold text-[#1d1833]">ACH Member Deposit</td>
-                <td className="py-2.5 px-3">Ibrahim M.</td>
-                <td className="py-2.5 px-3">
-                  <span className="px-2 py-0.5 rounded-full bg-[#dcfce7] text-[#15803d] text-[10px] font-semibold">
-                    Settled
-                  </span>
-                </td>
-                <td className="py-2.5 px-3 text-right font-bold text-emerald-700 font-mono">
-                  +$1,000.00
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+        <button
+          type="button"
+          onClick={() => onNavigate('ledger')}
+          className="px-4 py-2.5 rounded-xl bg-[#f2ebff] hover:bg-[#e6deff] text-[#5b3fd1] font-bold text-[13px] flex items-center gap-1.5 transition-colors cursor-pointer self-start sm:self-auto shrink-0"
+        >
+          <span>Open Full Ledger</span>
+          <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
+        </button>
       </div>
+
       {/* Invite Members Modal */}
       <Modal
         isOpen={isInviteModalOpen}
@@ -633,14 +493,14 @@ export function DashboardScreen({
           setCopiedLink(false);
         }}
         title="Invite Members to Pool"
-        subtitle="Dubai Run 2026 • Escrow Vault #DXB-9942"
+        subtitle="Dubai Run 2026 • Pool #DXB-9942"
         icon="group_add"
         iconBg="bg-[#f2ebff]"
         iconColor="text-[#431fb9]"
       >
         <div className="space-y-4">
           <p className="text-[13px] text-[#484554] leading-relaxed">
-            Share this secure invite link with group buyers. Members pledge their share directly through PayPal into the protected multi-party vault pot.
+            Share this secure invite link with group buyers. Members pledge their share directly into the protected multi-party vault pot.
           </p>
 
           <div className="space-y-1.5">

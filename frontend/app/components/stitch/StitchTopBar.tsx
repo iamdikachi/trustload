@@ -123,7 +123,7 @@ export function StitchTopBar({
       .catch(() => {});
   }, []);
 
-  // Left Slide-over Notifications Drawer State
+  // Slide-over Notifications Drawer State
   const [isNotificationsDrawerOpen, setIsNotificationsDrawerOpen] = useState(false);
   const [notifications, setNotifications] = useState<NotificationItem[]>([
     {
@@ -149,7 +149,7 @@ export function StitchTopBar({
       type: 'SUCCESS',
       icon: 'payments',
       title: 'PayPal Deposit Confirmed',
-      desc: 'Ibrahim deposited $1,000 share into the escrow vault. 4 of 5 member pledges fulfilled.',
+      desc: 'Ibrahim deposited $1,000 share into the group vault. 4 of 5 member pledges fulfilled.',
       time: '2h ago',
       unread: true,
     },
@@ -164,20 +164,95 @@ export function StitchTopBar({
     },
   ]);
 
+  // Load persisted notifications from localStorage on mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('trustload_notifications');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          setNotifications(parsed);
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const saveNotifications = (newList: NotificationItem[]) => {
+    setNotifications(newList);
+    try {
+      localStorage.setItem('trustload_notifications', JSON.stringify(newList));
+    } catch {
+      // ignore
+    }
+  };
+
+  const deleteNotification = (id: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    saveNotifications(notifications.filter((n) => n.id !== id));
+  };
+
+  const clearAllNotifications = () => {
+    saveNotifications([]);
+  };
+
+  const restoreDefaultNotifications = () => {
+    const defaults: NotificationItem[] = [
+      {
+        id: '1',
+        type: 'WARNING',
+        icon: 'fact_check',
+        title: 'Review Required: Dubai Gadget Wholesale',
+        desc: 'AED 6,100 ($1,661.12 USD) release request from traveler Chidi O. awaiting your consensus vote.',
+        time: '12m ago',
+        unread: true,
+      },
+      {
+        id: '2',
+        type: 'AI_FLAG',
+        icon: 'auto_awesome',
+        title: 'AI Audit Flag on Invoice AL-029',
+        desc: 'Multimodal OCR detected quantity mismatch (600 vs 500 ordered) & line items total discrepancy (AED 6,340 vs 6,100).',
+        time: '45m ago',
+        unread: true,
+      },
+      {
+        id: '3',
+        type: 'SUCCESS',
+        icon: 'payments',
+        title: 'PayPal Deposit Confirmed',
+        desc: 'Ibrahim deposited $1,000 share into the group vault. 4 of 5 member pledges fulfilled.',
+        time: '2h ago',
+        unread: true,
+      },
+      {
+        id: '4',
+        type: 'INFO',
+        icon: 'currency_exchange',
+        title: 'Live FX Rate Locked for Dubai Run',
+        desc: 'Market exchange rate locked at 1 USD = 3.67 AED (fair market rate: $0.2724).',
+        time: '4h ago',
+        unread: false,
+      },
+    ];
+    saveNotifications(defaults);
+  };
+
   const unreadCount = notifications.filter((n) => n.unread).length;
 
   const markAllAsRead = () => {
-    setNotifications((prev) => prev.map((n) => ({ ...n, unread: false })));
+    saveNotifications(notifications.map((n) => ({ ...n, unread: false })));
   };
 
   const titles: Record<ScreenPath, string> = {
-    dashboard: 'Group Escrow Dashboard',
-    ledger: 'Escrow Ledger & Transaction Audit',
-    'final-split': 'Trip Reconciliation & Final Split',
-    'create-group': 'Create Group Escrow Pool',
-    'new-release': 'New Release Request',
-    'review-approve': 'Review Escrow Release Claim',
-    'pay-contribution': 'Pay Member Contribution Share',
+    dashboard: 'Trip Overview',
+    'review-approve': 'Purchases & Invoices',
+    'pay-contribution': 'Pool Contributions',
+    ledger: 'Transaction Ledger',
+    'final-split': 'Final Settlement',
+    'create-group': 'Start New Trip Pool',
+    'new-release': 'Upload Purchase Invoice',
   };
 
   // Close FX dropdown on click outside
@@ -220,15 +295,11 @@ export function StitchTopBar({
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="font-['Bricolage_Grotesque',sans-serif] text-base sm:text-lg font-bold text-[#1d1833] tracking-tight">
-                  {titles[currentPath] || 'TrustLoad Escrow'}
+                  {titles[currentPath] || 'TrustLoad'}
                 </h1>
-                <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#f2ebff] text-[#431fb9]">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                  Live Sandbox
-                </span>
               </div>
               <p className="text-[11px] text-[#484554] hidden sm:block">
-                {tripName} • Automated Multi-Party Escrow
+                {tripName}
               </p>
             </div>
           </div>
@@ -413,12 +484,16 @@ export function StitchTopBar({
                   Notifications &amp; Activity
                 </h3>
                 <p className="text-[11px] text-[#797586]">
-                  {unreadCount > 0 ? `${unreadCount} unread update${unreadCount > 1 ? 's' : ''}` : 'All caught up'}
+                  {notifications.length === 0
+                    ? 'All caught up'
+                    : unreadCount > 0
+                    ? `${unreadCount} unread update${unreadCount > 1 ? 's' : ''}`
+                    : `${notifications.length} update${notifications.length > 1 ? 's' : ''}`}
                 </p>
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2.5">
               {unreadCount > 0 && (
                 <button
                   type="button"
@@ -426,6 +501,17 @@ export function StitchTopBar({
                   className="text-[11px] font-semibold text-[#5b3fd1] hover:underline cursor-pointer bg-transparent border-0"
                 >
                   Mark all read
+                </button>
+              )}
+              {notifications.length > 0 && (
+                <button
+                  type="button"
+                  onClick={clearAllNotifications}
+                  className="text-[11px] font-semibold text-[#ba1a1a] hover:underline cursor-pointer bg-transparent border-0 flex items-center gap-0.5"
+                  title="Delete all notifications"
+                >
+                  <span className="material-symbols-outlined text-[14px]">delete_sweep</span>
+                  <span>Clear all</span>
                 </button>
               )}
               <button
@@ -441,62 +527,108 @@ export function StitchTopBar({
 
           {/* Drawer Body / Activity List */}
           <div className="flex-1 overflow-y-auto p-4 space-y-3">
-            <div className="text-[10px] uppercase font-bold tracking-wider text-[#797586] px-1">
-              Recent Escrow Updates
+            <div className="flex items-center justify-between px-1">
+              <span className="text-[10px] uppercase font-bold tracking-wider text-[#797586]">
+                Recent Updates
+              </span>
+              {notifications.length > 0 && (
+                <span className="text-[10px] text-[#797586] font-medium">
+                  {notifications.length} item{notifications.length > 1 ? 's' : ''}
+                </span>
+              )}
             </div>
 
-            {notifications.map((item) => {
-              let badgeBg = 'bg-[#f2ebff] text-[#5b3fd1]';
-              if (item.type === 'WARNING') badgeBg = 'bg-[#fef3c7] text-[#b45309]';
-              if (item.type === 'SUCCESS') badgeBg = 'bg-[#dcfce7] text-[#15803d]';
-              if (item.type === 'INFO') badgeBg = 'bg-[#eff6ff] text-[#2563eb]';
-
-              return (
-                <div
-                  key={item.id}
-                  className={`p-3.5 rounded-xl transition-all border ${
-                    item.unread
-                      ? 'bg-[#fdf8ff] border-[#e6deff] shadow-xs'
-                      : 'bg-white border-zinc-100 hover:border-zinc-200'
-                  }`}
-                >
-                  <div className="flex items-start gap-3">
-                    <div
-                      className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5 ${badgeBg}`}
-                    >
-                      <span className="material-symbols-outlined text-[17px]">{item.icon}</span>
-                    </div>
-
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between gap-1">
-                        <h4 className="font-bold text-[13px] text-[#1d1833] leading-snug">
-                          {item.title}
-                        </h4>
-                        {item.unread && (
-                          <span className="w-2 h-2 rounded-full bg-[#5b3fd1] shrink-0" title="Unread" />
-                        )}
-                      </div>
-                      <p className="text-[12px] text-[#484554] leading-relaxed mt-1">
-                        {item.desc}
-                      </p>
-                      <div className="flex items-center justify-between mt-2 pt-1 text-[11px] text-[#797586]">
-                        <span className="font-medium">{item.time}</span>
-                        <span className="font-semibold text-[#5b3fd1] hover:underline cursor-pointer">
-                          View details →
-                        </span>
-                      </div>
-                    </div>
-                  </div>
+            {notifications.length === 0 ? (
+              <div className="py-16 px-4 text-center flex flex-col items-center justify-center space-y-3">
+                <div className="w-14 h-14 rounded-2xl bg-[#f2ebff] text-[#5b3fd1] flex items-center justify-center shadow-xs">
+                  <span className="material-symbols-outlined text-[28px]">notifications_off</span>
                 </div>
-              );
-            })}
+                <div className="space-y-1">
+                  <h4 className="font-bold text-[15px] text-[#1d1833]">No Notifications</h4>
+                  <p className="text-[12px] text-[#797586] max-w-[260px] leading-relaxed mx-auto">
+                    You have cleared all activity alerts. New updates will appear here automatically.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={restoreDefaultNotifications}
+                  className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#f2ebff] text-[#5b3fd1] hover:bg-[#e6deff] text-[12px] font-semibold transition-colors cursor-pointer border border-[#e6deff]"
+                >
+                  <span className="material-symbols-outlined text-[15px]">refresh</span>
+                  <span>Restore Demo Alerts</span>
+                </button>
+              </div>
+            ) : (
+              notifications.map((item) => {
+                let badgeBg = 'bg-[#f2ebff] text-[#5b3fd1]';
+                if (item.type === 'WARNING') badgeBg = 'bg-[#fef3c7] text-[#b45309]';
+                if (item.type === 'SUCCESS') badgeBg = 'bg-[#dcfce7] text-[#15803d]';
+                if (item.type === 'INFO') badgeBg = 'bg-[#eff6ff] text-[#2563eb]';
+
+                return (
+                  <div
+                    key={item.id}
+                    className={`group relative p-3.5 rounded-xl transition-all border ${
+                      item.unread
+                        ? 'bg-[#fdf8ff] border-[#e6deff] shadow-xs'
+                        : 'bg-white border-zinc-100 hover:border-zinc-200'
+                    }`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div
+                        className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5 ${badgeBg}`}
+                      >
+                        <span className="material-symbols-outlined text-[17px]">{item.icon}</span>
+                      </div>
+
+                      <div className="flex-1 min-w-0 pr-6">
+                        <div className="flex items-center gap-1.5">
+                          <h4 className="font-bold text-[13px] text-[#1d1833] leading-snug">
+                            {item.title}
+                          </h4>
+                          {item.unread && (
+                            <span className="w-2 h-2 rounded-full bg-[#5b3fd1] shrink-0" title="Unread" />
+                          )}
+                        </div>
+                        <p className="text-[12px] text-[#484554] leading-relaxed mt-1">
+                          {item.desc}
+                        </p>
+                        <div className="flex items-center justify-between mt-2.5 pt-1 text-[11px] text-[#797586]">
+                          <span className="font-medium">{item.time}</span>
+                          <button
+                            type="button"
+                            onClick={(e) => deleteNotification(item.id, e)}
+                            className="inline-flex items-center gap-1 text-[11px] text-[#797586] hover:text-[#ba1a1a] transition-colors cursor-pointer border-0 bg-transparent font-medium"
+                            title="Delete this notification"
+                          >
+                            <span className="material-symbols-outlined text-[14px]">delete</span>
+                            <span>Delete</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Quick Dismiss / Delete cross on top right */}
+                    <button
+                      type="button"
+                      onClick={(e) => deleteNotification(item.id, e)}
+                      className="absolute top-2.5 right-2.5 w-6 h-6 rounded-md flex items-center justify-center text-[#797586] hover:text-[#ba1a1a] hover:bg-[#fee2e2] opacity-60 hover:opacity-100 transition-all cursor-pointer border-0 bg-transparent"
+                      title="Delete notification"
+                      aria-label="Delete notification"
+                    >
+                      <span className="material-symbols-outlined text-[15px]">close</span>
+                    </button>
+                  </div>
+                );
+              })
+            )}
           </div>
 
           {/* Drawer Footer */}
           <div className="p-4 border-t border-[#e6deff] bg-[#f7f1ff] flex items-center justify-between text-[11px] text-[#797586]">
             <span className="flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-              PayPal Sandbox Ledger Active
+              Ledger Active
             </span>
             <button
               type="button"

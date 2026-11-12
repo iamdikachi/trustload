@@ -28,7 +28,8 @@ export function StitchSidebar({
   isMobileOpen = false,
   onCloseMobile,
 }: StitchSidebarProps) {
-  const mainNavItems: Array<{
+  // Clear, intuitive primary navigation representing the natural buying trip lifecycle
+  const navItems: Array<{
     path: ScreenPath;
     label: string;
     icon: string;
@@ -37,53 +38,34 @@ export function StitchSidebar({
   }> = [
     {
       path: 'dashboard',
-      label: 'Dashboard',
+      label: 'Overview',
       icon: 'dashboard',
     },
     {
+      path: 'review-approve',
+      label: 'Purchases & Invoices',
+      icon: 'receipt_long',
+      badge: '1 review',
+      badgeClass: 'bg-[#fef3c7] text-[#b45309]',
+    },
+    {
+      path: 'pay-contribution',
+      label: 'Pool Contributions',
+      icon: 'payments',
+      badge: '4/5 paid',
+      badgeClass: 'bg-[#dcfce7] text-[#15803d]',
+    },
+    {
       path: 'ledger',
-      label: 'Escrow Ledger',
+      label: 'Transaction Ledger',
       icon: 'account_balance',
       badge: '6 tx',
       badgeClass: 'bg-[#ece4ff] text-[#431fb9]',
     },
     {
       path: 'final-split',
-      label: 'Final Split & Refunds',
+      label: 'Final Settlement',
       icon: 'splitscreen',
-      badge: 'Reconciled',
-      badgeClass: 'bg-[#dcfce7] text-[#15803d]',
-    },
-    {
-      path: 'create-group',
-      label: 'Create Group',
-      icon: 'add_circle',
-    },
-  ];
-
-  const quickActions: Array<{
-    path: ScreenPath;
-    label: string;
-    icon: string;
-    badge?: string;
-    badgeClass?: string;
-  }> = [
-    {
-      path: 'new-release',
-      label: 'New Release Request',
-      icon: 'post_add',
-    },
-    {
-      path: 'review-approve',
-      label: 'Review & Approve',
-      icon: 'fact_check',
-      badge: '1 pending',
-      badgeClass: 'bg-[#fef3c7] text-[#b45309]',
-    },
-    {
-      path: 'pay-contribution',
-      label: 'Pay My Share ($1k)',
-      icon: 'payments',
     },
   ];
 
@@ -125,14 +107,9 @@ export function StitchSidebar({
               <div className="w-9 h-9 rounded-lg bg-[#431fb9] flex items-center justify-center text-white shadow-sm transition-transform group-hover:scale-105">
                 <span className="material-symbols-outlined text-[20px]">shield</span>
               </div>
-              <div className="flex items-baseline gap-1.5">
-                <span className="font-headline-sm text-[20px] font-black tracking-tight text-[#1d1833] group-hover:text-[#431fb9] transition-colors">
-                  TrustLoad
-                </span>
-                <span className="font-label-sm text-[10px] px-2 py-0.5 rounded-full bg-[#f2ebff] text-[#431fb9] uppercase font-bold tracking-wider">
-                  Escrow
-                </span>
-              </div>
+              <span className="font-headline-sm text-[20px] font-black tracking-tight text-[#1d1833] group-hover:text-[#431fb9] transition-colors">
+                TrustLoad
+              </span>
             </div>
 
             {/* Close button on mobile */}
@@ -147,12 +124,29 @@ export function StitchSidebar({
             )}
           </div>
 
-          {/* Main Navigation */}
-          <div className="px-3 py-2 space-y-1">
-            <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-[#797586]">
-              Main Navigation
+          {/* Active Trip Info Card */}
+          <div className="p-3 mx-3 my-2.5 rounded-xl bg-[#f7f1ff] border border-[#e6deff]">
+            <div className="flex items-center justify-between text-[10px] text-[#797586] font-bold uppercase tracking-wider mb-1">
+              <span>Current Buying Trip</span>
+              <span className="text-[#15803d] font-bold flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#15803d] animate-pulse"></span>
+                Active
+              </span>
             </div>
-            {mainNavItems.map((item) => {
+            <div className="font-bold text-[13px] text-[#1d1833] truncate leading-tight">
+              {tripName}
+            </div>
+            <div className="text-[11px] text-[#484554] mt-0.5">
+              {travelerName} • Quorum: {quorumPolicy}
+            </div>
+          </div>
+
+          {/* Primary Navigation */}
+          <div className="px-3 py-1 space-y-1">
+            <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-[#797586]">
+              Trip Navigation
+            </div>
+            {navItems.map((item) => {
               const isActive = currentPath === item.path;
               return (
                 <button
@@ -189,55 +183,29 @@ export function StitchSidebar({
             })}
           </div>
 
-          {/* Quick Actions Navigation */}
+          {/* Action to Start New Trip */}
           <div className="px-3 pt-3 space-y-1 border-t border-[#e6deff]/70 mt-2">
-            <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-[#797586]">
-              Trip Milestones
-            </div>
-            {quickActions.map((item) => {
-              const isActive = currentPath === item.path;
-              return (
-                <button
-                  key={item.path}
-                  type="button"
-                  onClick={() => handleItemClick(item.path)}
-                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-[12px] font-semibold transition-all cursor-pointer ${
-                    isActive
-                      ? 'bg-[#5b3fd1] text-white shadow-sm font-bold'
-                      : 'text-[#484554] hover:text-[#1d1833] hover:bg-[#f2ebff]'
-                  }`}
-                >
-                  <div className="flex items-center gap-2.5">
-                    <span
-                      className={`material-symbols-outlined text-[18px] ${
-                        isActive ? 'text-white' : 'text-[#797586]'
-                      }`}
-                    >
-                      {item.icon}
-                    </span>
-                    <span>{item.label}</span>
-                  </div>
-                  {item.badge && (
-                    <span
-                      className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold ${
-                        isActive ? 'bg-white/20 text-white' : item.badgeClass
-                      }`}
-                    >
-                      {item.badge}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
+            <button
+              type="button"
+              onClick={() => handleItemClick('create-group')}
+              className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-[12px] font-semibold transition-all cursor-pointer ${
+                currentPath === 'create-group'
+                  ? 'bg-[#5b3fd1] text-white shadow-sm font-bold'
+                  : 'text-[#484554] hover:text-[#1d1833] hover:bg-[#f2ebff]'
+              }`}
+            >
+              <span className="material-symbols-outlined text-[18px]">add_circle</span>
+              <span>+ Start New Trip Pool</span>
+            </button>
           </div>
         </div>
 
-        {/* Bottom Section: Persona Switcher, Public Landing Link, User Info */}
+        {/* Bottom Section: Simulation Role & User Info */}
         <div className="p-3 border-t border-[#e6deff] space-y-2 bg-[#fdf8ff]">
           {/* Persona Selection */}
           <div className="p-2 rounded-xl bg-white border border-[#e6deff] space-y-1">
             <div className="text-[10px] uppercase font-bold text-[#797586] px-1">
-              Simulation Persona
+              Active Simulation Role
             </div>
             <select
               aria-label="Active Simulation Persona"
@@ -251,39 +219,40 @@ export function StitchSidebar({
             </select>
           </div>
 
-          {/* User Profile Footer Row */}
-          <div className="flex items-center justify-between p-2 rounded-xl bg-white border border-[#e6deff]">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-full bg-[#431fb9] flex items-center justify-center text-white text-[12px] font-bold shadow-sm ring-2 ring-[#e6deff]">
-                CO
-              </div>
-              <div className="flex flex-col">
-                <span className="text-[12px] font-bold text-[#1d1833] leading-tight">
-                  Chidi Okonkwo
-                </span>
-                <span className="text-[10px] text-[#797586] leading-tight">
-                  {activePersonaRole === 'TRAVELER'
-                    ? 'Escrow Custodian'
-                    : activePersonaRole === 'VENDOR'
-                    ? 'Member Seat #1'
-                    : 'Auditor'}
-                </span>
-              </div>
+          {/* Active User Card */}
+          <div className="flex items-center gap-3 px-3 py-2 rounded-xl bg-white border border-[#e6deff]">
+            <div className="w-8 h-8 rounded-full bg-[#431fb9] flex items-center justify-center text-white text-[12px] font-bold shrink-0">
+              {activePersonaRole === 'TRAVELER' ? 'CO' : activePersonaRole === 'VENDOR' ? 'AO' : 'AU'}
             </div>
-
-            {/* Return to Landing Page */}
-            <button
-              type="button"
-              onClick={onGoToLanding}
-              title="Return to Public Landing Page"
-              className="p-1.5 text-[#5b3fd1] hover:bg-[#f2ebff] rounded-lg transition-colors cursor-pointer"
-            >
-              <span className="material-symbols-outlined text-[18px]">logout</span>
-            </button>
+            <div className="flex flex-col min-w-0">
+              <span className="text-[12px] font-bold text-[#1d1833] leading-tight truncate">
+                {activePersonaRole === 'TRAVELER'
+                  ? 'Chidi Okonkwo'
+                  : activePersonaRole === 'VENDOR'
+                  ? 'Amaka Nwosu'
+                  : 'Independent Auditor'}
+              </span>
+              <span className="text-[10px] text-[#797586] leading-tight">
+                {activePersonaRole === 'TRAVELER'
+                  ? 'Trip Traveler'
+                  : activePersonaRole === 'VENDOR'
+                  ? 'Member Seat #1'
+                  : 'Observer'}
+              </span>
+            </div>
           </div>
+
+          {/* Return to Landing Page */}
+          <button
+            type="button"
+            onClick={onGoToLanding}
+            className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold text-[#797586] hover:text-[#1d1833] hover:bg-[#f2ebff] transition-colors cursor-pointer"
+          >
+            <span className="material-symbols-outlined text-[14px]">arrow_back</span>
+            <span>Back to Homepage</span>
+          </button>
         </div>
       </aside>
     </>
   );
 }
-
