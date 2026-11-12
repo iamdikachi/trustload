@@ -16,6 +16,13 @@ import { ReviewApproveScreen } from './components/stitch/ReviewApproveScreen';
 import { PayContributionScreen } from './components/stitch/PayContributionScreen';
 
 type ViewMode = 'LANDING' | 'APP';
+type ToastType = 'success' | 'error' | 'info';
+
+interface ToastState {
+  id: number;
+  message: string;
+  type: ToastType;
+}
 
 export default function Home() {
   const [viewMode, setViewMode] = useState<ViewMode>('LANDING');
@@ -23,7 +30,7 @@ export default function Home() {
   const [activePersonaRole, setActivePersonaRole] = useState<'TRAVELER' | 'VENDOR' | 'AUDITOR'>('TRAVELER');
   const [isReleaseApproved, setIsReleaseApproved] = useState(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [toast, setToast] = useState<ToastState | null>(null);
 
   // Live Backend & PostgreSQL State
   const [liveGroups, setLiveGroups] = useState<Group[]>([]);
@@ -33,12 +40,13 @@ export default function Home() {
   const [isLiveConnected, setIsLiveConnected] = useState<boolean>(false);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
 
-  const showToast = (msg: string) => {
-    setToastMessage(msg);
+  const showToast = useCallback((message: string, type: ToastType = 'success') => {
+    const id = Date.now();
+    setToast({ id, message, type });
     setTimeout(() => {
-      setToastMessage((cur) => (cur === msg ? null : cur));
-    }, 4000);
-  };
+      setToast((cur) => (cur?.id === id ? null : cur));
+    }, 4500);
+  }, []);
 
   const fetchLiveBackend = useCallback(async (preferredGroupId?: string) => {
     try {
@@ -55,12 +63,13 @@ export default function Home() {
             api.getReleaseRequests(activeId).catch(() => []),
             api.getGroupLedger(activeId).catch(() => null),
           ]);
-          setLiveReleaseRequests(requests || []);
+          setLiveReleaseRequests(Array.isArray(requests) ? requests : []);
           if (ledger) setLiveLedger(ledger);
         } catch {
           // ignore sub-resource errors
         }
       } else {
+        setLiveGroups([]);
         setIsLiveConnected(true);
       }
     } catch {
@@ -81,6 +90,7 @@ export default function Home() {
       const view = params.get('view');
       const screen = params.get('screen') as ScreenPath | null;
       const paid = params.get('paid');
+      const groupIdParam = params.get('groupId');
 
       if (view === 'app' || screen) {
         setViewMode('APP');
@@ -88,80 +98,141 @@ export default function Home() {
       if (screen) {
         setCurrentScreen(screen);
       }
+      if (groupIdParam) {
+        setSelectedGroupId(groupIdParam);
+      }
       if (paid === 'true') {
-        showToast('Payment confirmed! Vault & ledger updated.');
-        fetchLiveBackend();
+        showToast('Payment confirmed! Vault & ledger updated.', 'success');
+        fetchLiveBackend(groupIdParam || undefined);
       }
     }
-  }, [fetchLiveBackend]);
+  }, [fetchLiveBackend, showToast]);
 
-  const activeGroup = liveGroups.find((g) => g.id === selectedGroupId) || (liveGroups.length > 0 ? liveGroups[0] : null);
+  const activeGroup =
+    liveGroups.find((g) => g.id === selectedGroupId) ||
+    (liveGroups.length > 0 ? liveGroups[0] : null);
 
-  const handleApproveRelease = async () => {
-    setIsReleaseApproved(true);
-    if (isLiveConnected && liveReleaseRequests.length > 0) {
-      try {
-        const req = liveReleaseRequests[0];
-        const memberId = activeGroup?.members?.[0]?.id;
-        if (req && memberId) {
-          await api.submitApproval(req.id, {
-            memberId,
-            decision: 'APPROVED',
-            comment: 'Consensus verified by auditor and group vendors.',
-          });
-          showToast('Approval recorded on group ledger!');
-          await fetchLiveBackend();
-          return;
-        }
-      } catch (err: any) {
-        console.warn('API error during approval:', err);
-      }
+  const handleSelectGroup = useCallback(
+    (groupId: string) => {
+      setSelectedGroupId(groupId);
+      setIsReleaseApproved(false);
+      fetchLiveBackend(groupId);
+      setCurrentScreen('dashboard');
+    },
+    [fetchLiveBackend]
+  );
+
+  const handleApproveRelease = async (releaseRequestId?: string) => {
+    const targetId = releaseRequestId || liveReleaseRequests?.[0]?.id;
+    const memberId = activeGroup?.members?.[0]?.id;
+
+    if (!targetId || !memberId) {
+      showToast('No pending release request or member available to vote.', 'error');
+      return;
     }
-    showToast('Release request approved! Consensus reached (3 of 3). Payout sent.');
+
+    try {
+      const res = await api.submitApproval(targetId, {
+        memberId,
+        decision: 'APPROVED',
+        comment: 'Consensus verified via TrustLoad dashboard.',
+      });
+      if (res.isThresholdMet) {
+        setIsReleaseApproved(true);
+        showToast(`Consensus reached (${res.approvalCount}/${res.approvalThreshold})! Payout triggered.`, 'success');
+      } else {
+        showToast(`Vote recorded (${res.approvalCount}/${res.approvalThreshold} approvals).`, 'success');
+      }
+      await fetchLiveBackend(activeGroup?.id);
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to submit approval vote.', 'error');
+    }
   };
 
   const handleSettleGroup = async () => {
-    if (isLiveConnected && activeGroup?.id) {
-      try {
-        await api.settleGroup(activeGroup.id);
-        showToast('Settlement executed! Residuals refunded.');
-        await fetchLiveBackend();
-        return;
-      } catch (err: any) {
-        console.warn('API error during settlement:', err);
-      }
+    if (!activeGroup?.id) {
+      showToast('No active group selected.', 'error');
+      return;
     }
-    showToast('Final settlement executed! Group ledger closed.');
+    try {
+      await api.settleGroup(activeGroup.id);
+      showToast('Settlement executed! Residuals refunded and pool closed.', 'success');
+      await fetchLiveBackend(activeGroup.id);
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to settle group.', 'error');
+    }
   };
 
-  const handleCreateGroup = async (data: any) => {
+  const handleCreateGroup = async (data: {
+    name: string;
+    travelerName: string;
+    travelerEmail: string;
+    baseCurrency: string;
+    approvalThreshold: number;
+    members: Array<{
+      name: string;
+      email: string;
+      contributionExpected: number;
+      orders: Array<{ item: string; quantity: number; budget: number }>;
+    }>;
+  }) => {
     try {
-      showToast(`Creating Group Pool "${data.name}"...`);
       const created = await api.createGroup({
         name: data.name,
-        travelerName: data.travelerName || 'Chidi Okonkwo',
-        travelerEmail: data.travelerEmail || 'chidi.traveler@trustload.africa',
-        approvalThreshold: data.approvalThreshold ? Math.round(data.approvalThreshold * 5) : 3,
+        travelerName: data.travelerName,
+        travelerEmail: data.travelerEmail,
+        approvalThreshold: data.approvalThreshold,
         sharedCostRule: 'PROPORTIONAL_TO_VALUE',
         baseCurrency: data.baseCurrency || 'USD',
+        members: data.members,
       });
-      showToast(`Group Pool "${created.name}" created!`);
+      showToast(`Trip pool "${created.name}" created!`, 'success');
+      setSelectedGroupId(created.id);
       await fetchLiveBackend(created.id);
       setCurrentScreen('dashboard');
+      return true;
     } catch (err: any) {
-      console.warn('API error during createGroup:', err);
-      showToast(`Group Pool "${data.name}" launched!`);
-      setCurrentScreen('dashboard');
+      const msg = err?.message || 'Could not create trip pool. Please check backend connection.';
+      showToast(msg, 'error');
+      throw err;
     }
   };
 
-  const handleSubmitRelease = (data: any) => {
-    showToast(`New release claim for ${data.vendorName} submitted for AI check & group consensus.`);
+  const handleSubmitRelease = async (data: any) => {
+    showToast(`Purchase claim for ${data.vendorName} uploaded for AI check & group consensus.`, 'success');
+    await fetchLiveBackend(activeGroup?.id);
   };
 
-  const handleConfirmPayment = () => {
-    showToast('Your $1,000 contribution was deposited into the group vault!');
+  const handleConfirmPayment = async () => {
+    showToast('Contribution recorded in the group vault!', 'success');
+    await fetchLiveBackend(activeGroup?.id);
   };
+
+  // Dynamic Sidebar Counts from Real Data
+  const membersList = activeGroup?.members || [];
+  const paidCount = membersList.filter((m) => {
+    const exp = Number(m.contributionExpected || 0);
+    const paid = (m.contributions || [])
+      .filter((c) => c.status === 'COMPLETED')
+      .reduce((s, c) => s + Number(c.amount || 0), 0);
+    return exp > 0 ? paid >= exp : paid > 0;
+  }).length;
+
+  const pendingReviewsCount = (
+    liveReleaseRequests.length > 0
+      ? liveReleaseRequests
+      : activeGroup?.pendingReleaseRequests || []
+  ).filter(
+    (r) =>
+      r.status === 'AWAITING_APPROVAL' ||
+      r.status === 'PENDING_VERIFICATION' ||
+      r.status === 'PENDING'
+  ).length;
+
+  const ledgerCount =
+    liveLedger?.entries?.length ??
+    activeGroup?.ledgerEntries?.length ??
+    undefined;
 
   if (viewMode === 'LANDING') {
     return (
@@ -180,11 +251,45 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-[#fdf8ff] text-[#1d1833] flex font-sans selection:bg-[#5b3fd1] selection:text-white">
-      {/* Toast Notification */}
-      {toastMessage && (
-        <div className="fixed bottom-5 right-5 z-50 bg-[#1d1833] text-white px-4 py-3 rounded-xl shadow-2xl border border-[#5b3fd1] text-xs font-semibold flex items-center gap-2 animate-bounce">
-          <span className="material-symbols-outlined text-[#86efac] text-[18px]">verified</span>
-          <span>{toastMessage}</span>
+      {/* Real Top Toast Notification */}
+      {toast && (
+        <div
+          role="status"
+          aria-live="polite"
+          className={`fixed top-4 left-1/2 -translate-x-1/2 z-[100] max-w-md w-[calc(100%-2rem)] px-4 py-3 rounded-xl shadow-xl border text-[13px] font-semibold flex items-center justify-between gap-3 transition-all duration-200 ${
+            toast.type === 'error'
+              ? 'bg-[#7f1d1d] text-white border-red-400/50'
+              : toast.type === 'info'
+              ? 'bg-[#1d1833] text-white border-[#7c5be8]/60'
+              : 'bg-[#1d1833] text-white border-emerald-500/60'
+          }`}
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span
+              className={`material-symbols-outlined text-[20px] shrink-0 ${
+                toast.type === 'error'
+                  ? 'text-red-300'
+                  : toast.type === 'info'
+                  ? 'text-[#c9beff]'
+                  : 'text-[#86efac]'
+              }`}
+            >
+              {toast.type === 'error'
+                ? 'error'
+                : toast.type === 'info'
+                ? 'info'
+                : 'check_circle'}
+            </span>
+            <span className="leading-snug">{toast.message}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setToast(null)}
+            className="text-white/70 hover:text-white p-0.5 rounded-md cursor-pointer bg-transparent border-0 shrink-0"
+            aria-label="Dismiss notification"
+          >
+            <span className="material-symbols-outlined text-[18px]">close</span>
+          </button>
         </div>
       )}
 
@@ -193,13 +298,27 @@ export default function Home() {
         currentPath={currentScreen}
         onNavigate={setCurrentScreen}
         onGoToLanding={() => setViewMode('LANDING')}
-        tripName="Phone accessories, Dubai run"
-        travelerName="Traveler: Chidi O."
-        quorumPolicy="3 of 5"
+        tripName={activeGroup?.name || 'No Active Trip'}
+        travelerName={
+          activeGroup?.traveler?.name
+            ? `Traveler: ${activeGroup.traveler.name}`
+            : 'Traveler'
+        }
+        quorumPolicy={
+          activeGroup
+            ? `${activeGroup.approvalThreshold} of ${membersList.length}`
+            : '3 of 5'
+        }
+        groups={liveGroups}
+        selectedGroupId={activeGroup?.id}
+        onSelectGroup={handleSelectGroup}
+        pendingReviewsCount={pendingReviewsCount}
+        paidMembersLabel={membersList.length > 0 ? `${paidCount}/${membersList.length} paid` : undefined}
+        ledgerCount={ledgerCount}
         activePersonaRole={activePersonaRole}
         onSwitchPersona={(role) => {
           setActivePersonaRole(role);
-          showToast(`Switched active simulation persona to: ${role}`);
+          showToast(`Switched active simulation role to: ${role}`, 'info');
         }}
         isMobileOpen={isMobileSidebarOpen}
         onCloseMobile={() => setIsMobileSidebarOpen(false)}
@@ -212,7 +331,7 @@ export default function Home() {
           currentPath={currentScreen}
           onOpenMobileSidebar={() => setIsMobileSidebarOpen(true)}
           onGoToLanding={() => setViewMode('LANDING')}
-          tripName="Phone accessories, Dubai run"
+          tripName={activeGroup?.name || 'TrustLoad'}
         />
 
         {/* Dynamic Screen Viewport */}
@@ -222,6 +341,11 @@ export default function Home() {
               onNavigate={setCurrentScreen}
               isReleaseApproved={isReleaseApproved}
               onApproveRelease={handleApproveRelease}
+              group={activeGroup}
+              releaseRequests={liveReleaseRequests}
+              isLoading={isSyncing && !activeGroup}
+              onRefresh={() => fetchLiveBackend(activeGroup?.id)}
+              onNotify={showToast}
             />
           )}
 
@@ -253,6 +377,10 @@ export default function Home() {
               onNavigate={setCurrentScreen}
               onSubmitRelease={handleSubmitRelease}
               groupId={activeGroup?.id}
+              groupName={activeGroup?.name}
+              travelerName={activeGroup?.traveler?.name}
+              potBalance={activeGroup?.summary?.potBalance ?? 0}
+              baseCurrency={activeGroup?.baseCurrency || 'USD'}
             />
           )}
 
@@ -272,6 +400,8 @@ export default function Home() {
               onConfirmPayment={handleConfirmPayment}
               groupId={activeGroup?.id}
               memberId={activeGroup?.members?.[0]?.id}
+              group={activeGroup}
+              onNotify={showToast}
             />
           )}
         </main>

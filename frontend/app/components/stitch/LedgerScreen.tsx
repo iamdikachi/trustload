@@ -18,6 +18,7 @@ export function LedgerScreen({ onNavigate, groupId, liveLedger }: LedgerScreenPr
   const [copiedRef, setCopiedRef] = useState(false);
   const [liveEntries, setLiveEntries] = useState<any[] | null>(null);
   const [potBalance, setPotBalance] = useState<number | null>(null);
+  const [ledgerSummary, setLedgerSummary] = useState<any | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
@@ -26,24 +27,25 @@ export function LedgerScreen({ onNavigate, groupId, liveLedger }: LedgerScreenPr
       setIsLoading(true);
       api.getGroupLedger(targetId)
         .then((res) => {
-          if (res && res.entries && res.entries.length > 0) {
-            setPotBalance(res.potBalance);
+          setPotBalance(res.potBalance);
+          if (res.summary) setLedgerSummary(res.summary);
+          if (res && res.entries) {
             const mapped = res.entries.map((entry: any, index: number) => {
-              const isCredit = entry.type === 'CONTRIBUTION';
+              const isCredit = entry.type === 'CONTRIBUTION' || entry.type === 'REVERSAL';
               return {
                 id: entry.id || `live-tx-${index}`,
-                category: isCredit ? 'deposit' : 'release',
-                title: entry.type === 'CONTRIBUTION' ? 'Member Deposit' : (entry.type === 'STAGED_RELEASE' ? 'Staged Payout' : entry.type),
-                subtitle: `Ledger Entry • ${entry.type}`,
-                member: entry.member?.user?.name || entry.member?.name || 'Group Vault',
+                category: entry.type === 'CONTRIBUTION' ? 'deposit' : 'release',
+                title: entry.description || (entry.type === 'CONTRIBUTION' ? 'Member Deposit' : entry.type),
+                subtitle: `${entry.type} • ${entry.currency} ${Number(entry.originalAmount || entry.amount).toLocaleString()}`,
+                member: entry.member?.user?.name || 'Group Vault',
                 avatar: (entry.member?.user?.name || 'GV').slice(0, 2).toUpperCase(),
                 date: new Date(entry.createdAt).toLocaleString(),
-                ref: `LEDGER-${entry.id.slice(0, 8).toUpperCase()}`,
-                amount: `${isCredit ? '+' : '-'}$${Number(entry.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}`,
+                ref: entry.paypalRef || `LEDGER-${entry.id.slice(0, 8).toUpperCase()}`,
+                amount: `${isCredit ? '+' : '-'}$${Math.abs(Number(entry.amount)).toLocaleString('en-US', { minimumFractionDigits: 2 })}`,
                 isCredit,
-                status: 'Immutable Block Confirmed',
+                status: 'Confirmed on Ledger',
                 statusClass: isCredit ? 'bg-[#f2ebff] text-[#431fb9]' : 'bg-[#e7deff] text-[#1f005f]',
-                hash: entry.hash || 'SHA256:7f83b1657ff1fc53b92dc18148a1d65dfc2d4b1fa3d677284addd200126d9069',
+                hash: entry.hash || `REF:${entry.paypalRef || entry.id}`,
               };
             });
             setLiveEntries(mapped);
@@ -141,7 +143,7 @@ export function LedgerScreen({ onNavigate, groupId, liveLedger }: LedgerScreenPr
     },
   ];
 
-  const transactionList = liveEntries && liveEntries.length > 0 ? liveEntries : transactions;
+  const transactionList = liveEntries !== null ? liveEntries : transactions;
   const filtered = transactionList.filter((tx) => {
     if (filter !== 'all' && tx.category !== filter) return false;
     if (searchQuery) {
@@ -219,29 +221,32 @@ export function LedgerScreen({ onNavigate, groupId, liveLedger }: LedgerScreenPr
               <span className="material-symbols-outlined text-[18px]">savings</span>
             </span>
           </div>
-          <div className="text-3xl font-black text-[#1d1833] mb-1">$4,000.00</div>
+          <div className="text-3xl font-black text-[#1d1833] mb-1">
+            ${(ledgerSummary?.totalIn ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </div>
           <div className="flex items-center gap-1.5">
             <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-[#ece4ff] text-[#431fb9] font-label-sm text-[10px] font-semibold">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#5b3fd1] mr-1"></span>4 deposits cleared
+              <span className="w-1.5 h-1.5 rounded-full bg-[#5b3fd1] mr-1"></span>
+              {ledgerSummary?.entryCount ?? (liveEntries?.length || 0)} ledger entries
             </span>
-            <span className="text-[11px] text-[#797586]">80% of total target</span>
           </div>
         </div>
 
         {/* Total Disbursed */}
         <div className="bg-white p-5 rounded-2xl shadow-sm border border-[#e6deff] relative">
           <div className="flex items-center justify-between mb-2">
-            <span className="font-label-md text-[13px] text-[#484554]">Disbursed to Traveler</span>
+            <span className="font-label-md text-[13px] text-[#484554]">Net Disbursed</span>
             <span className="w-8 h-8 rounded-lg bg-[#e7deff] flex items-center justify-center text-[#1f005f]">
               <span className="material-symbols-outlined text-[18px]">flight_takeoff</span>
             </span>
           </div>
-          <div className="text-3xl font-black text-[#633fce] mb-1">$1,960.00</div>
+          <div className="text-3xl font-black text-[#633fce] mb-1">
+            ${(ledgerSummary?.netSpend ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </div>
           <div className="flex items-center gap-1.5">
             <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-[#e7deff] text-[#1f005f] font-label-sm text-[10px] font-semibold">
-              1 verified release
+              Verified releases
             </span>
-            <span className="text-[11px] text-[#797586]">Shenzhen supplier</span>
           </div>
         </div>
 
@@ -253,29 +258,31 @@ export function LedgerScreen({ onNavigate, groupId, liveLedger }: LedgerScreenPr
               <span className="material-symbols-outlined text-[18px]">lock</span>
             </span>
           </div>
-          <div className="text-3xl font-black text-[#1d1833] mb-1">$2,040.00</div>
+          <div className="text-3xl font-black text-[#1d1833] mb-1">
+            ${(potBalance ?? ledgerSummary?.potBalance ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </div>
           <div className="flex items-center gap-1.5">
             <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-[#f2ebff] text-[#431fb9] font-label-sm text-[10px] font-semibold">
-              <span className="material-symbols-outlined text-[12px] mr-1">shield</span> Secured
+              <span className="material-symbols-outlined text-[12px] mr-1">shield</span> Live PostgreSQL
             </span>
-            <span className="text-[11px] text-[#797586]">Ready for stage 2</span>
           </div>
         </div>
 
-        {/* Pending / Pipeline */}
+        {/* Total Refunded */}
         <div className="bg-white p-5 rounded-2xl shadow-sm border border-[#e6deff] relative">
           <div className="flex items-center justify-between mb-2">
-            <span className="font-label-md text-[13px] text-[#484554]">Pending / Pipeline</span>
+            <span className="font-label-md text-[13px] text-[#484554]">Total Refunded</span>
             <span className="w-8 h-8 rounded-lg bg-[#ece4ff] flex items-center justify-center text-[#45387f]">
-              <span className="material-symbols-outlined text-[18px]">pending_actions</span>
+              <span className="material-symbols-outlined text-[18px]">replay</span>
             </span>
           </div>
-          <div className="text-3xl font-black text-[#1d1833] mb-1">$1,661.00</div>
+          <div className="text-3xl font-black text-[#1d1833] mb-1">
+            ${(ledgerSummary?.totalRefunded ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </div>
           <div className="flex items-center gap-1.5">
             <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-[#ece4ff] text-[#45387f] font-label-sm text-[10px] font-semibold">
-              Consensus pending
+              Settlement refunds
             </span>
-            <span className="text-[11px] text-[#797586]">1 invoice match</span>
           </div>
         </div>
       </div>

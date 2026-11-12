@@ -1,14 +1,17 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ScreenPath } from './StitchHeader';
 import { api } from '../../lib/api';
+import { Group } from '../../types';
 
 interface PayContributionScreenProps {
   onNavigate: (path: ScreenPath) => void;
   onConfirmPayment?: () => void;
   groupId?: string;
   memberId?: string;
+  group?: Group | null;
+  onNotify?: (message: string, type?: 'success' | 'error' | 'info') => void;
 }
 
 export function PayContributionScreen({
@@ -16,30 +19,101 @@ export function PayContributionScreen({
   onConfirmPayment,
   groupId,
   memberId,
+  group,
+  onNotify,
 }: PayContributionScreenProps) {
+  const members = group?.members || [];
+  const defaultMember =
+    members.find((m) => {
+      const paid = (m.contributions || [])
+        .filter((c) => c.status === 'COMPLETED')
+        .reduce((s, c) => s + Number(c.amount || 0), 0);
+      return paid < Number(m.contributionExpected || 0);
+    }) ||
+    members[0] ||
+    null;
+
+  const [selectedMemberId, setSelectedMemberId] = useState<string>(
+    memberId || defaultMember?.id || ''
+  );
   const [method, setMethod] = useState<'paypal' | 'card' | 'ach'>('paypal');
   const [isProcessing, setIsProcessing] = useState(false);
   const [isPaid, setIsPaid] = useState(false);
 
+  useEffect(() => {
+    if (defaultMember?.id && !members.some((m) => m.id === selectedMemberId)) {
+      setSelectedMemberId(defaultMember.id);
+    }
+  }, [defaultMember?.id, members, selectedMemberId]);
+
+  const activeMember =
+    members.find((m) => m.id === selectedMemberId) || defaultMember;
+  const currency = group?.baseCurrency || 'USD';
+
+  const expectedShare = Number(activeMember?.contributionExpected || 0);
+  const alreadyPaid = (activeMember?.contributions || [])
+    .filter((c) => c.status === 'COMPLETED')
+    .reduce((s, c) => s + Number(c.amount || 0), 0);
+  const remainingDue = Math.max(0, expectedShare - alreadyPaid);
+  const payAmount = remainingDue > 0 ? remainingDue : expectedShare;
+
+  const totalExpectedPool =
+    group?.summary?.totalExpectedContribution ??
+    members.reduce((s, m) => s + Number(m.contributionExpected || 0), 0);
+  const totalCompletedPool =
+    group?.summary?.totalContributionsCompleted ??
+    members.reduce(
+      (s, m) =>
+        s +
+        (m.contributions || [])
+          .filter((c) => c.status === 'COMPLETED')
+          .reduce((cSum, c) => cSum + Number(c.amount || 0), 0),
+      0
+    );
+  const pendingPeers = Math.max(0, totalExpectedPool - totalCompletedPool - payAmount);
+  const allocationPct =
+    totalExpectedPool > 0
+      ? ((expectedShare / totalExpectedPool) * 100).toFixed(1)
+      : '0.0';
+  const fundedPct =
+    totalExpectedPool > 0
+      ? Math.min(100, (totalCompletedPool / totalExpectedPool) * 100)
+      : 0;
+  const thisSharePct =
+    totalExpectedPool > 0
+      ? Math.min(100 - fundedPct, (payAmount / totalExpectedPool) * 100)
+      : 0;
+
   const handlePay = async () => {
+    const targetGroupId = group?.id || groupId;
+    const targetMemberId = activeMember?.id || memberId;
+
+    if (!targetGroupId || !targetMemberId) {
+      if (onNotify) onNotify('Please select a group and member first.', 'error');
+      return;
+    }
+
+    if (payAmount <= 0) {
+      if (onNotify) onNotify('Contribution amount must be greater than 0.', 'error');
+      return;
+    }
+
     setIsProcessing(true);
     try {
-      if (groupId) {
-        const memId = memberId || 'default-member';
-        const order = await api.createContributionOrder(groupId, memId, 1000, 'USD').catch(() => null);
-        
-        // If PayPal Sandbox generated an approval URL, route the user to PayPal!
-        if (order?.approvalUrl) {
-          window.location.href = order.approvalUrl;
-          return;
-        } else if (order?.orderId) {
-          // Direct fallback if no approval redirect was required
-          await api.captureContributionOrder(order.orderId).catch(() => null);
-        }
+      const order = await api.createContributionOrder(
+        targetGroupId,
+        targetMemberId,
+        payAmount,
+        currency
+      );
+
+      if (order?.approvalUrl) {
+        window.location.href = order.approvalUrl;
+        return;
+      } else if (order?.orderId) {
+        await api.captureContributionOrder(order.orderId);
       }
-      
-      // Fallback in-page confirmation if offline or mock
-      setIsProcessing(false);
+
       setIsPaid(true);
       if (onConfirmPayment) {
         onConfirmPayment();
@@ -47,8 +121,12 @@ export function PayContributionScreen({
       setTimeout(() => {
         onNavigate('dashboard');
       }, 1200);
-    } catch (e) {
+    } catch (e: any) {
       console.warn('Live contribution notice:', e);
+      if (onNotify) {
+        onNotify(e?.message || 'Failed to initiate PayPal payment.', 'error');
+      }
+    } finally {
       setIsProcessing(false);
     }
   };
@@ -64,25 +142,29 @@ export function PayContributionScreen({
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-[#e6deff] text-[#431fb9] hover:bg-[#f2ebff] text-[13px] font-semibold transition-all shadow-sm cursor-pointer"
           >
             <span className="material-symbols-outlined text-[18px]">arrow_back</span>
-            <span>Back to Group Dashboard</span>
+            <span>Back to Overview</span>
           </button>
           <span className="text-[#c9c4d7]">•</span>
-          <span className="text-[13px] text-[#484554]">Batch #DXB-89</span>
+          <span className="text-[13px] text-[#484554]">
+            Pool #{(group?.id || groupId || '').slice(0, 8).toUpperCase() || '—'}
+          </span>
         </div>
         <div className="flex items-center gap-3">
           <span
             className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider shadow-sm ${
-              isPaid
+              isPaid || (expectedShare > 0 && remainingDue === 0)
                 ? 'bg-[#dcfce7] text-[#15803d]'
                 : 'bg-[#fef3c7] text-[#b45309]'
             }`}
           >
             <span className="w-2 h-2 rounded-full bg-current animate-pulse"></span>
-            Status: {isPaid ? 'Payment Confirmed' : 'Awaiting Payment'}
+            Status: {isPaid || (expectedShare > 0 && remainingDue === 0) ? 'Paid' : 'Awaiting Payment'}
           </span>
           <div className="hidden md:flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#ece4ff] text-[#484554] text-[11px] font-semibold">
             <span className="material-symbols-outlined text-[16px] text-[#431fb9]">verified_user</span>
-            <span>Consensus Required: 3 of 5</span>
+            <span>
+              Consensus Required: {group?.approvalThreshold ?? 0} of {members.length}
+            </span>
           </div>
         </div>
       </div>
@@ -93,19 +175,45 @@ export function PayContributionScreen({
         <div className="lg:col-span-7 flex flex-col gap-6">
           {/* Top Contribution Highlight Card */}
           <div className="bg-white rounded-2xl p-6 sm:p-8 shadow-sm border border-[#e6deff] flex flex-col gap-6 relative overflow-hidden">
+            {members.length > 0 && (
+              <div>
+                <label className="block text-[11px] uppercase font-bold tracking-wider text-[#797586] mb-1.5">
+                  Paying As Member
+                </label>
+                <select
+                  value={activeMember?.id || ''}
+                  onChange={(e) => setSelectedMemberId(e.target.value)}
+                  className="w-full sm:w-auto min-w-[260px] px-3 py-2 rounded-xl bg-[#f7f1ff] border border-[#e6deff] text-[13px] font-semibold text-[#1d1833] outline-none cursor-pointer"
+                >
+                  {members.map((m) => {
+                    const paid = (m.contributions || [])
+                      .filter((c) => c.status === 'COMPLETED')
+                      .reduce((s, c) => s + Number(c.amount || 0), 0);
+                    return (
+                      <option key={m.id} value={m.id}>
+                        {m.user?.name || 'Member'} — {currency} {paid.toLocaleString()} / {Number(m.contributionExpected).toLocaleString()}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+            )}
+
             <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
               <div>
                 <span className="text-[11px] uppercase tracking-wider text-[#431fb9] font-bold bg-[#e7deff] px-2.5 py-1 rounded-full">
-                  Your Individual Share (1 of 5)
+                  {remainingDue === 0 && expectedShare > 0
+                    ? 'Seat Fully Funded'
+                    : `Remaining Due (${activeMember?.user?.name || 'Member'})`}
                 </span>
                 <div className="mt-3 flex items-baseline gap-2">
                   <span className="text-4xl sm:text-5xl text-[#1d1833] font-black tracking-tight">
-                    $1,000.00
+                    ${payAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
-                  <span className="text-xl text-[#484554] font-bold">USD</span>
+                  <span className="text-xl text-[#484554] font-bold">{currency}</span>
                 </div>
                 <p className="text-[14px] text-[#484554] mt-1">
-                  Your agreed share for <span className="font-semibold text-[#1d1833]">Phone accessories, Dubai run</span>
+                  Share for <span className="font-semibold text-[#1d1833]">{group?.name || 'Selected Trip Pool'}</span>
                 </p>
               </div>
               <div className="flex items-center gap-2 bg-[#f7f1ff] border border-[#e6deff] px-3 py-2 rounded-xl self-start">
@@ -122,19 +230,19 @@ export function PayContributionScreen({
               <div className="flex justify-between items-center text-[13px]">
                 <span className="text-[#1d1833] font-semibold flex items-center gap-1.5">
                   <span className="w-2.5 h-2.5 rounded-full bg-[#5b3fd1]"></span>
-                  Your Stake in Total Pool ($5,000.00 Expected)
+                  Your Stake in Total Pool ({currency} {totalExpectedPool.toLocaleString('en-US', { minimumFractionDigits: 2 })} Expected)
                 </span>
-                <span className="text-[#431fb9] font-bold">20.0% Allocation</span>
+                <span className="text-[#431fb9] font-bold">{allocationPct}% Allocation</span>
               </div>
               <div className="w-full h-4 bg-[#e6deff] rounded-full overflow-hidden flex p-0.5 gap-0.5">
-                <div className="h-full bg-[#633fce] rounded-l-full" style={{ width: '40%' }} title="Pre-funded ($2,000.00)"></div>
-                <div className="h-full bg-[#5b3fd1]" style={{ width: '20%' }} title="Your Share ($1,000.00)"></div>
-                <div className="h-full bg-[#ded5fa] rounded-r-full" style={{ width: '40%' }} title="Awaiting peers ($2,000.00)"></div>
+                <div className="h-full bg-[#633fce] rounded-l-full" style={{ width: `${fundedPct}%` }} title={`Paid (${totalCompletedPool})`}></div>
+                <div className="h-full bg-[#5b3fd1]" style={{ width: `${thisSharePct}%` }} title={`This Share (${payAmount})`}></div>
+                <div className="h-full bg-[#ded5fa] rounded-r-full" style={{ width: `${Math.max(0, 100 - fundedPct - thisSharePct)}%` }}></div>
               </div>
               <div className="flex justify-between items-center text-[11px] text-[#484554] pt-1">
-                <span>Pre-funded: <strong>$2,000.00</strong></span>
-                <span>You: <strong>$1,000.00</strong></span>
-                <span>Pending Peers: <strong>$2,000.00</strong></span>
+                <span>Collected: <strong>${totalCompletedPool.toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong></span>
+                <span>Your Share: <strong>${expectedShare.toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong></span>
+                <span>Pending Peers: <strong>${pendingPeers.toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong></span>
               </div>
             </div>
           </div>
@@ -202,8 +310,8 @@ export function PayContributionScreen({
             <button
               type="button"
               onClick={handlePay}
-              disabled={isProcessing || isPaid}
-              className={`w-full py-4 rounded-xl font-bold text-[14px] shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer ${
+              disabled={isProcessing || isPaid || payAmount <= 0}
+              className={`w-full py-4 rounded-xl font-bold text-[14px] shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60 ${
                 isPaid
                   ? 'bg-[#15803d] text-white'
                   : 'bg-[#5b3fd1] hover:bg-[#431fb9] text-white active:scale-[0.98]'
@@ -217,7 +325,7 @@ export function PayContributionScreen({
                   ? 'Contribution Confirmed ✓'
                   : isProcessing
                   ? 'Connecting to PayPal...'
-                  : 'Confirm & Pay $1,000 via PayPal'}
+                  : `Confirm & Pay ${currency} ${payAmount.toLocaleString()} via PayPal`}
               </span>
             </button>
           </div>
@@ -234,7 +342,7 @@ export function PayContributionScreen({
             <div className="p-3 bg-[#f7f1ff] rounded-xl border border-[#e6deff] space-y-1">
               <span className="font-bold text-[#1d1833] block">Zero Unilateral Withdrawals</span>
               <p className="text-[#484554] leading-relaxed">
-                Neither the traveler nor individual members can move money without a 60% group sign-off quorum.
+                Neither the traveler nor individual members can move money without group sign-off quorum.
               </p>
             </div>
 
@@ -257,4 +365,3 @@ export function PayContributionScreen({
     </div>
   );
 }
-

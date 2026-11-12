@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { ScreenPath } from './StitchHeader';
+import { Group } from '../../types';
 
 interface StitchSidebarProps {
   currentPath: ScreenPath;
@@ -10,6 +11,12 @@ interface StitchSidebarProps {
   tripName?: string;
   travelerName?: string;
   quorumPolicy?: string;
+  groups?: Group[];
+  selectedGroupId?: string | null;
+  onSelectGroup?: (groupId: string) => void;
+  pendingReviewsCount?: number;
+  paidMembersLabel?: string;
+  ledgerCount?: number;
   activePersonaRole: 'TRAVELER' | 'VENDOR' | 'AUDITOR';
   onSwitchPersona: (role: 'TRAVELER' | 'VENDOR' | 'AUDITOR') => void;
   isMobileOpen?: boolean;
@@ -20,9 +27,15 @@ export function StitchSidebar({
   currentPath,
   onNavigate,
   onGoToLanding,
-  tripName = 'Phone accessories, Dubai run',
-  travelerName = 'Traveler: Chidi O.',
+  tripName = 'Loading trip...',
+  travelerName = 'Traveler',
   quorumPolicy = '3 of 5',
+  groups = [],
+  selectedGroupId,
+  onSelectGroup,
+  pendingReviewsCount = 0,
+  paidMembersLabel,
+  ledgerCount,
   activePersonaRole,
   onSwitchPersona,
   isMobileOpen = false,
@@ -45,21 +58,21 @@ export function StitchSidebar({
       path: 'review-approve',
       label: 'Purchases & Invoices',
       icon: 'receipt_long',
-      badge: '1 review',
+      badge: pendingReviewsCount > 0 ? `${pendingReviewsCount} review` : undefined,
       badgeClass: 'bg-[#fef3c7] text-[#b45309]',
     },
     {
       path: 'pay-contribution',
       label: 'Pool Contributions',
       icon: 'payments',
-      badge: '4/5 paid',
+      badge: paidMembersLabel,
       badgeClass: 'bg-[#dcfce7] text-[#15803d]',
     },
     {
       path: 'ledger',
       label: 'Transaction Ledger',
       icon: 'account_balance',
-      badge: '6 tx',
+      badge: ledgerCount !== undefined ? `${ledgerCount} tx` : undefined,
       badgeClass: 'bg-[#ece4ff] text-[#431fb9]',
     },
     {
@@ -124,7 +137,7 @@ export function StitchSidebar({
             )}
           </div>
 
-          {/* Active Trip Info Card */}
+          {/* Active Trip Info Card & Switcher */}
           <div className="p-3 mx-3 my-2.5 rounded-xl bg-[#f7f1ff] border border-[#e6deff]">
             <div className="flex items-center justify-between text-[10px] text-[#797586] font-bold uppercase tracking-wider mb-1">
               <span>Current Buying Trip</span>
@@ -133,10 +146,28 @@ export function StitchSidebar({
                 Active
               </span>
             </div>
-            <div className="font-bold text-[13px] text-[#1d1833] truncate leading-tight">
-              {tripName}
-            </div>
-            <div className="text-[11px] text-[#484554] mt-0.5">
+            {groups.length > 1 && onSelectGroup ? (
+              <select
+                aria-label="Select Buying Trip"
+                value={selectedGroupId || groups[0]?.id}
+                onChange={(e) => {
+                  onSelectGroup(e.target.value);
+                  if (onCloseMobile) onCloseMobile();
+                }}
+                className="w-full font-bold text-[13px] text-[#1d1833] bg-white border border-[#e6deff] rounded-lg px-2 py-1 mt-0.5 cursor-pointer outline-none focus:ring-1 focus:ring-[#5b3fd1]"
+              >
+                {groups.map((g) => (
+                  <option key={g.id} value={g.id}>
+                    {g.name} ({g.status})
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <div className="font-bold text-[13px] text-[#1d1833] truncate leading-tight">
+                {tripName}
+              </div>
+            )}
+            <div className="text-[11px] text-[#484554] mt-1">
               {travelerName} • Quorum: {quorumPolicy}
             </div>
           </div>

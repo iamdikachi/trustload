@@ -114,10 +114,21 @@ export const api = {
       orders?: Array<{ item: string; quantity: number; budget: number }>;
     }>;
   }): Promise<Group> {
+    const payload = {
+      name: data.name,
+      traveler: {
+        name: data.travelerName,
+        email: data.travelerEmail,
+      },
+      approvalThreshold: data.approvalThreshold,
+      sharedCostRule: data.sharedCostRule || 'PROPORTIONAL_TO_VALUE',
+      baseCurrency: data.baseCurrency || 'USD',
+      ...(data.members && data.members.length > 0 ? { members: data.members } : {}),
+    };
     const res = await fetch(`${API_BASE}/groups`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
+      body: JSON.stringify(payload),
     });
     return handleResponse<Group>(res);
   },
@@ -253,15 +264,26 @@ export const api = {
     groupId: string;
     potBalance: number;
     entries: LedgerEntry[];
+    summary?: {
+      totalIn: number;
+      totalReleased: number;
+      totalReversals: number;
+      netSpend: number;
+      totalRefunded: number;
+      potBalance: number;
+      entryCount: number;
+    };
   }> {
     const res = await fetch(`${API_BASE}/groups/${groupId}/ledger`, {
       cache: 'no-store',
     });
-    return handleResponse<{
-      groupId: string;
-      potBalance: number;
-      entries: LedgerEntry[];
-    }>(res);
+    const data = await handleResponse<any>(res);
+    return {
+      groupId: data.groupId || groupId,
+      potBalance: data.summary?.potBalance ?? data.potBalance ?? 0,
+      entries: data.ledgerEntries || data.entries || [],
+      summary: data.summary,
+    };
   },
 
   async simulatePaypalWebhook(eventData: any) {
@@ -294,7 +316,9 @@ export const api = {
     const res = await fetch(`${API_BASE}/groups/${groupId}/release-requests`, {
       cache: 'no-store',
     });
-    return handleResponse<ReleaseRequest[]>(res);
+    const data = await handleResponse<any>(res);
+    if (Array.isArray(data)) return data;
+    return data.releaseRequests || data.pendingReleaseRequests || [];
   },
 
   async getReleaseRequestById(id: string): Promise<ReleaseRequest> {
